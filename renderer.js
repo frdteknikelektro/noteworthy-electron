@@ -279,7 +279,8 @@ const domElements = {
   exportPdfBtn: document.getElementById('exportPdfBtn'),
   languageSelect: document.getElementById('languageSelect'),
   promptInput: document.getElementById('promptInput'),
-  silenceInput: document.getElementById('silenceInput')
+  silenceInput: document.getElementById('silenceInput'),
+  themeToggleBtn: document.getElementById('themeToggle')
 };
 
 const {
@@ -305,8 +306,110 @@ const {
   exportPdfBtn,
   languageSelect,
   promptInput,
-  silenceInput
+  silenceInput,
+  themeToggleBtn
 } = domElements;
+
+const THEME_STORAGE_KEY = 'mic-speaker-streamer.theme';
+const THEME_MODES = ['system', 'light', 'dark'];
+const THEME_ICONS = { system: '🌓', light: '☀️', dark: '🌙' };
+const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' };
+const SYSTEM_PREFERS_DARK =
+  typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null;
+let currentThemeMode = 'system';
+
+const themeIcon = themeToggleBtn?.querySelector('[data-theme-icon]');
+const themeLabel = themeToggleBtn?.querySelector('[data-theme-label]');
+
+function normalizeTheme(mode = 'system') {
+  if (THEME_MODES.includes(mode)) {
+    return mode;
+  }
+  return 'system';
+}
+
+function getNextTheme(mode) {
+  const normalized = normalizeTheme(mode);
+  const currentIndex = THEME_MODES.indexOf(normalized);
+  return THEME_MODES[(currentIndex + 1) % THEME_MODES.length];
+}
+
+function resolveThemeTone(mode) {
+  if (mode === 'system') {
+    if (SYSTEM_PREFERS_DARK) {
+      return SYSTEM_PREFERS_DARK.matches ? 'dark' : 'light';
+    }
+    return 'light';
+  }
+  return mode;
+}
+
+function applyTheme(mode, options = { persist: false }) {
+  const normalized = normalizeTheme(mode);
+  currentThemeMode = normalized;
+  const resolved = resolveThemeTone(normalized);
+  document.documentElement.dataset.theme = resolved;
+
+  if (themeToggleBtn) {
+    themeToggleBtn.dataset.theme = normalized;
+    if (themeIcon) {
+      themeIcon.textContent = THEME_ICONS[normalized] || '🌓';
+    }
+    if (themeLabel) {
+      themeLabel.textContent = THEME_LABELS[normalized] || 'System';
+    }
+    themeToggleBtn.setAttribute('aria-label', `Switch theme — current ${THEME_LABELS[normalized] || normalized}`);
+  }
+
+  if (options.persist) {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, normalized);
+    } catch (error) {
+      console.warn('Unable to persist theme preference:', error);
+    }
+  }
+}
+
+function handleSystemThemeChange() {
+  if (currentThemeMode === 'system') {
+    applyTheme('system');
+  }
+}
+
+function watchSystemTheme() {
+  if (!SYSTEM_PREFERS_DARK) return;
+  if ('addEventListener' in SYSTEM_PREFERS_DARK) {
+    SYSTEM_PREFERS_DARK.addEventListener('change', handleSystemThemeChange);
+  } else if ('addListener' in SYSTEM_PREFERS_DARK) {
+    SYSTEM_PREFERS_DARK.addListener(handleSystemThemeChange);
+  }
+}
+
+function loadStoredThemePreference() {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (THEME_MODES.includes(stored)) {
+      return stored;
+    }
+  } catch (error) {
+    console.warn('Unable to read theme preference:', error);
+  }
+  return 'system';
+}
+
+function initThemeControls() {
+  const storedTheme = loadStoredThemePreference();
+  applyTheme(storedTheme);
+
+  themeToggleBtn?.addEventListener('click', () => {
+    const next = getNextTheme(themeToggleBtn.dataset.theme || currentThemeMode);
+    applyTheme(next, { persist: true });
+  });
+
+  watchSystemTheme();
+}
 
 function generateId(prefix = 'entry') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -1137,6 +1240,7 @@ function initialize() {
   ensurePlaceholder();
   renderPreferences();
   attachPreferenceListeners();
+  initThemeControls();
 }
 
 document.addEventListener('DOMContentLoaded', initialize);
