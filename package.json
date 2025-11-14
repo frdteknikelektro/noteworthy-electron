@@ -13,13 +13,23 @@
   "version": "1.0.0",
   "author": "Alec Armbruster <alectrocute@gmail.com>",
   "scripts": {
-    "start": "electron ."
+    "dev": "vite",
+    "build:renderer": "vite build",
+    "start": "npm run build:renderer && electron ."
   },
   "dependencies": {
+    "clsx": "^2.1.1",
     "dotenv": "^17.2.0",
-    "electron-audio-loopback": "^1.0.5"
+    "electron-audio-loopback": "^1.0.5",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
   },
   "devDependencies": {
-    "electron": "35.0.0"
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.15",
+    "electron": "35.0.0",
+    "postcss": "^8.4.27",
+    "tailwindcss": "^3.4.3",
+    "vite": "^5.0.0"
   }
 }

@@ -27,8 +27,10 @@ Noteworthy is a beautiful Electron desktop note taker that pipes both microphone
 
 ```bash
 npm install
-npm start
+npm start  # runs `vite build` before launching Electron
 ```
+
+For faster UI iteration you can run `npm run dev` to start the Vite dev server while you work on the renderer bundle.
 
 1. Create a `.env` in the project root:
    ```ini
@@ -54,9 +56,11 @@ npm start
 - **Markdown** – produces a `.md` file with timestamps, source labels, and highlights (converted to plain text).
 - **PDF** – opens a print preview; choose *Save as PDF* to download a styled snapshot of the note.
 
-## Development Notes
-
-- Project entry points live in `main.js` (Electron main), `renderer.js` (UI + logic), and `preload.js`.
+-## Development Notes
+-
+- Project entry points now live in `main.js` (Electron main), `preload.js`, and the React renderer under `src/renderer`.
+- The renderer is bundled with Vite/Tailwind, renders from `src/renderer/index.jsx`, and ships the app shell + shadcn-inspired helpers stored in `src/renderer/components/ui` (build output lands in `dist/`).
+- Run `npm run build:renderer` to produce a fresh renderer bundle before `npm start`, or use `npm run dev` for the Vite dev server while prototyping.
 - Audio loopback is provided by [`electron-audio-loopback`](https://github.com/alectrocute/electron-audio-loopback).
 - Tests are not configured yet. Add `jest` or `mocha` if you contribute automated coverage.
 - Packaging is not set up; add `electron-builder` or similar if you need installers.
