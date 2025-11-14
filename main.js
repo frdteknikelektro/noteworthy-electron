@@ -9,9 +9,12 @@ initAudioLoopback();
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
-    width: 650,
-    height: 600,
-    title: 'Mic & Speaker Streamer',
+    width: 1180,
+    height: 780,
+    minWidth: 960,
+    minHeight: 680,
+    title: 'Noteworthy — Automatic Notes',
+    backgroundColor: '#f5f5f3',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false
@@ -20,6 +23,8 @@ function createWindow() {
 
   mainWindow.loadFile('index.html')
 }
+
+app.setName('Noteworthy');
 
 app.whenReady().then(() => {
   createWindow()

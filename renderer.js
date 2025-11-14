@@ -1,574 +1,1142 @@
 // Session class for OpenAI Realtime API
 class Session {
-    constructor(apiKey, streamType) {
-        this.apiKey = apiKey;
-        this.streamType = streamType;
-        this.useSessionToken = true;
-        this.ms = null;
-        this.pc = null;
-        this.dc = null;
-        this.muted = false;
+  constructor(apiKey, streamType) {
+    this.apiKey = apiKey;
+    this.streamType = streamType;
+    this.useSessionToken = true;
+    this.ms = null;
+    this.pc = null;
+    this.dc = null;
+  }
+
+  async startTranscription(stream, sessionConfig) {
+    await this.startInternal(stream, sessionConfig, '/v1/realtime/transcription_sessions');
+  }
+
+  stop() {
+    this.dc?.close();
+    this.dc = null;
+    this.pc?.close();
+    this.pc = null;
+    this.ms?.getTracks().forEach(track => track.stop());
+    this.ms = null;
+  }
+
+  async startInternal(stream, sessionConfig, tokenEndpoint) {
+    this.ms = stream;
+    this.pc = new RTCPeerConnection();
+    this.pc.ontrack = event => this.ontrack?.(event);
+    this.pc.addTrack(stream.getTracks()[0]);
+    this.pc.onconnectionstatechange = () => this.onconnectionstatechange?.(this.pc.connectionState);
+    this.dc = this.pc.createDataChannel('');
+    this.dc.onopen = () => this.onopen?.();
+    this.dc.onmessage = event => this.onmessage?.(JSON.parse(event.data));
+
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+
+    try {
+      const answer = await this.signal(offer, sessionConfig, tokenEndpoint);
+      await this.pc.setRemoteDescription(answer);
+    } catch (error) {
+      this.onerror?.(error);
     }
+  }
 
-    async start(stream, sessionConfig) {
-        await this.startInternal(stream, sessionConfig, "/v1/realtime/sessions");
-    }
+  async signal(offer, sessionConfig, tokenEndpoint) {
+    const urlRoot = 'https://api.openai.com';
+    const realtimeUrl = `${urlRoot}/v1/realtime`;
+    let sdpResponse;
 
-    async startTranscription(stream, sessionConfig) {
-        await this.startInternal(stream, sessionConfig, "/v1/realtime/transcription_sessions");
-    }
+    if (this.useSessionToken) {
+      const sessionUrl = `${urlRoot}${tokenEndpoint}`;
+      const sessionResponse = await fetch(sessionUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'openai-beta': 'realtime-v1',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(sessionConfig)
+      });
 
-    stop() {
-        this.dc?.close();
-        this.dc = null;
-        this.pc?.close();
-        this.pc = null;
-        this.ms?.getTracks().forEach(t => t.stop());
-        this.ms = null;
-        this.muted = false;
-    }
+      if (!sessionResponse.ok) {
+        throw new Error('Failed to request session token');
+      }
 
-    mute(muted) {
-        this.muted = muted;
-        this.pc.getSenders().forEach(sender => sender.track.enabled = !muted);
-    }
+      const sessionData = await sessionResponse.json();
+      const clientSecret = sessionData.client_secret.value;
 
-    async startInternal(stream, sessionConfig, tokenEndpoint) {
-        this.ms = stream;
-        this.pc = new RTCPeerConnection();
-        this.pc.ontrack = (e) => this.ontrack?.(e);
-        this.pc.addTrack(stream.getTracks()[0]);
-        this.pc.onconnectionstatechange = () => this.onconnectionstatechange?.(this.pc.connectionState);
-        this.dc = this.pc.createDataChannel("");
-        this.dc.onopen = (e) => this.onopen?.();
-        this.dc.onmessage = (e) => this.onmessage?.(JSON.parse(e.data));
-
-        const offer = await this.pc.createOffer();
-        await this.pc.setLocalDescription(offer);
-        try {
-            const answer = await this.signal(offer, sessionConfig, tokenEndpoint);
-            await this.pc.setRemoteDescription(answer);
-        } catch (e) {
-            this.onerror?.(e);
+      sdpResponse = await fetch(realtimeUrl, {
+        method: 'POST',
+        body: offer.sdp,
+        headers: {
+          Authorization: `Bearer ${clientSecret}`,
+          'Content-Type': 'application/sdp'
         }
+      });
+
+      if (!sdpResponse.ok) {
+        throw new Error('Failed to signal');
+      }
+    } else {
+      const formData = new FormData();
+      formData.append('session', JSON.stringify(sessionConfig));
+      formData.append('sdp', offer.sdp);
+
+      sdpResponse = await fetch(realtimeUrl, {
+        method: 'POST',
+        body: formData,
+        headers: { Authorization: `Bearer ${this.apiKey}` }
+      });
+
+      if (!sdpResponse.ok) {
+        throw new Error('Failed to signal');
+      }
     }
 
-    async signal(offer, sessionConfig, tokenEndpoint) {
-        const urlRoot = "https://api.openai.com";
-        const realtimeUrl = `${urlRoot}/v1/realtime`;
-        let sdpResponse;
-        if (this.useSessionToken) {
-            const sessionUrl = `${urlRoot}${tokenEndpoint}`;
-            const sessionResponse = await fetch(sessionUrl, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${this.apiKey}`,
-                    "openai-beta": "realtime-v1",
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(sessionConfig),
-            });
-            if (!sessionResponse.ok) {
-                throw new Error("Failed to request session token");
-            }
-            const sessionData = await sessionResponse.json();
-            const clientSecret = sessionData.client_secret.value;
-            sdpResponse = await fetch(`${realtimeUrl}`, {
-                method: "POST",
-                body: offer.sdp,
-                headers: {
-                    Authorization: `Bearer ${clientSecret}`,
-                    "Content-Type": "application/sdp"
-                },
-            });
-            if (!sdpResponse.ok) {
-                throw new Error("Failed to signal");
-            }
-        } else {
-            const formData = new FormData();
-            formData.append("session", JSON.stringify(sessionConfig));
-            formData.append("sdp", offer.sdp);
-            sdpResponse = await fetch(`${realtimeUrl}`, {
-                method: "POST",
-                body: formData,
-                headers: { Authorization: `Bearer ${this.apiKey}` },
-            });
-            if (!sdpResponse.ok) {
-                throw new Error("Failed to signal");
-            }
-        }
-        return { type: "answer", sdp: await sdpResponse.text() };
-    }
+    return { type: 'answer', sdp: await sdpResponse.text() };
+  }
 
-    sendMessage(message) {
-        this.dc.send(JSON.stringify(message));
-    }
+  sendMessage(message) {
+    this.dc?.send(JSON.stringify(message));
+  }
 }
 
-// WAV Recorder class
+// WAV recorder for optional backup
 class WavRecorder {
-    constructor() {
-        this.mediaRecorder = null;
-        this.audioChunks = [];
-        this.isRecording = false;
-        this.combinedStream = null;
+  constructor() {
+    this.mediaRecorder = null;
+    this.audioChunks = [];
+    this.isRecording = false;
+    this.combinedStream = null;
+  }
+
+  async startRecording(microphoneStream, systemAudioStream) {
+    if (this.isRecording) return;
+    if (!microphoneStream || !systemAudioStream) {
+      throw new Error('Start capture before recording backup audio.');
     }
 
-    async startRecording(microphoneStream, systemAudioStream) {
-        if (this.isRecording) return;
+    const audioContext = new AudioContext();
+    const micSource = audioContext.createMediaStreamSource(microphoneStream);
+    const systemSource = audioContext.createMediaStreamSource(systemAudioStream);
+    const merger = audioContext.createChannelMerger(2);
+    micSource.connect(merger, 0, 0);
+    systemSource.connect(merger, 0, 1);
+    const destination = audioContext.createMediaStreamDestination();
+    merger.connect(destination);
 
-        try {
-            // Create audio context to mix streams
-            const audioContext = new AudioContext();
+    this.combinedStream = destination.stream;
+    this.mediaRecorder = new MediaRecorder(this.combinedStream, { mimeType: 'audio/webm;codecs=opus' });
+    this.audioChunks = [];
+    this.isRecording = true;
 
-            // Create sources for both streams
-            const micSource = audioContext.createMediaStreamSource(microphoneStream);
-            const systemSource = audioContext.createMediaStreamSource(systemAudioStream);
+    this.mediaRecorder.ondataavailable = event => {
+      if (event.data.size > 0) {
+        this.audioChunks.push(event.data);
+      }
+    };
 
-            // Create a merger to combine the audio
-            const merger = audioContext.createChannelMerger(2);
+    this.mediaRecorder.onstop = () => this.saveRecording();
+    this.mediaRecorder.start(1000);
+  }
 
-            // Connect both sources to the merger
-            micSource.connect(merger, 0, 0);
-            systemSource.connect(merger, 0, 1);
+  stopRecording() {
+    if (!this.isRecording || !this.mediaRecorder) return;
+    this.mediaRecorder.stop();
+    this.isRecording = false;
+  }
 
-            // Create a destination stream
-            const destination = audioContext.createMediaStreamDestination();
-            merger.connect(destination);
+  async saveRecording() {
+    if (this.audioChunks.length === 0) return;
 
-            this.combinedStream = destination.stream;
+    try {
+      const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioContext = new AudioContext();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const wavBlob = this.audioBufferToWav(audioBuffer);
+      const url = URL.createObjectURL(wavBlob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `noteworthy-recording-${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error saving WAV recording:', error);
+    }
+  }
 
-            // Start recording
-            this.mediaRecorder = new MediaRecorder(this.combinedStream, {
-                mimeType: 'audio/webm;codecs=opus'
-            });
+  audioBufferToWav(buffer) {
+    const length = buffer.length;
+    const channels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const arrayBuffer = new ArrayBuffer(44 + length * channels * 2);
+    const view = new DataView(arrayBuffer);
 
-            this.audioChunks = [];
-            this.isRecording = true;
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
 
-            this.mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    this.audioChunks.push(event.data);
-                }
-            };
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + length * channels * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * channels * 2, true);
+    view.setUint16(32, channels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, length * channels * 2, true);
 
-            this.mediaRecorder.onstop = () => {
-                this.saveRecording();
-            };
-
-            this.mediaRecorder.start(1000); // Collect data every second
-            console.log('WAV recording started');
-
-        } catch (error) {
-            console.error('Error starting WAV recording:', error);
-            throw error;
-        }
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let channel = 0; channel < channels; channel++) {
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
+        view.setInt16(offset, sample * 0x7fff, true);
+        offset += 2;
+      }
     }
 
-    stopRecording() {
-        if (!this.isRecording || !this.mediaRecorder) return;
-
-        this.mediaRecorder.stop();
-        this.isRecording = false;
-        console.log('WAV recording stopped');
-    }
-
-    async saveRecording() {
-        if (this.audioChunks.length === 0) return;
-
-        try {
-            // Convert to WAV format
-            const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-            const arrayBuffer = await audioBlob.arrayBuffer();
-
-            // Convert to WAV using Web Audio API
-            const audioContext = new AudioContext();
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-            // Create WAV file
-            const wavBlob = this.audioBufferToWav(audioBuffer);
-
-            // Save file
-            const url = URL.createObjectURL(wavBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `recording_${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            console.log('WAV file saved');
-
-        } catch (error) {
-            console.error('Error saving WAV recording:', error);
-        }
-    }
-
-    audioBufferToWav(buffer) {
-        const length = buffer.length;
-        const numberOfChannels = buffer.numberOfChannels;
-        const sampleRate = buffer.sampleRate;
-        const arrayBuffer = new ArrayBuffer(44 + length * numberOfChannels * 2);
-        const view = new DataView(arrayBuffer);
-
-        // WAV header
-        const writeString = (offset, string) => {
-            for (let i = 0; i < string.length; i++) {
-                view.setUint8(offset + i, string.charCodeAt(i));
-            }
-        };
-
-        writeString(0, 'RIFF');
-        view.setUint32(4, 36 + length * numberOfChannels * 2, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, numberOfChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * numberOfChannels * 2, true);
-        view.setUint16(32, numberOfChannels * 2, true);
-        view.setUint16(34, 16, true);
-        writeString(36, 'data');
-        view.setUint32(40, length * numberOfChannels * 2, true);
-
-        // Write audio data
-        let offset = 44;
-        for (let i = 0; i < length; i++) {
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
-                view.setInt16(offset, sample * 0x7FFF, true);
-                offset += 2;
-            }
-        }
-
-        return new Blob([arrayBuffer], { type: 'audio/wav' });
-    }
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  }
 }
 
-// Global variables
-let microphoneSession = null;
-let systemAudioSession = null;
-let microphoneSessionConfig = null;
-let systemAudioSessionConfig = null;
-let microphoneVadTime = 0;
-let systemAudioVadTime = 0;
-let wavRecorder = new WavRecorder();
-let microphoneStream = null;
-let systemAudioStream = null;
-
-// DOM elements
-const micResults = document.getElementById('micResults');
-const speakerResults = document.getElementById('speakerResults');
-const micStatus = document.getElementById('micStatus');
-const micSelect = document.getElementById('micSelect');
-const speakerStatus = document.getElementById('speakerStatus');
-const recordStatus = document.getElementById('recordStatus');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const recordBtn = document.getElementById('recordBtn');
-const modelSelect = document.getElementById('modelSelect');
-
-// Configuration
-const CONFIG = {
-    API_ENDPOINTS: {
-        session: 'https://api.openai.com/v1/realtime/sessions',
-        realtime: 'https://api.openai.com/v1/realtime'
-    },
-    VOICE: 'echo',
-    VOICES: ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'],
-    INITIAL_MESSAGE: {
-        text: "The transcription will probably be in English."
-    }
+const STORAGE_KEYS = {
+  notes: 'noteworthy.notes.v1',
+  activeNote: 'noteworthy.active-note',
+  settings: 'noteworthy.settings.v1'
 };
 
-function updateMicSelect() {
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-        devices.forEach(device => {
-            if (device.kind === 'audioinput') {
-                const option = document.createElement('option');
-                option.value = device.deviceId;
-                option.textContent = device.label;
-                micSelect.appendChild(option);
-            }
-        });
+const LANGUAGE_LABELS = {
+  id: 'Bahasa Indonesia',
+  en: 'English',
+  ms: 'Bahasa Melayu',
+  ja: 'Japanese',
+  ko: 'Korean',
+  zh: 'Chinese',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German'
+};
+
+const DEFAULT_PREFERENCES = {
+  language: 'id',
+  prompt: '',
+  silenceSeconds: 5
+};
+
+const STREAM_META = {
+  microphone: { statusId: 'microphone', messageSource: 'microphone', errorLabel: 'microphone' },
+  system_audio: { statusId: 'speaker', messageSource: 'speaker', errorLabel: 'system audio' }
+};
+
+const state = {
+  notes: [],
+  activeNoteId: null,
+  isCapturing: false,
+  drafts: {
+    microphone: null,
+    speaker: null
+  },
+  preferences: { ...DEFAULT_PREFERENCES }
+};
+
+let microphoneSession = null;
+let systemAudioSession = null;
+let microphoneStream = null;
+let systemAudioStream = null;
+const wavRecorder = new WavRecorder();
+
+const domElements = {
+  micStatus: document.getElementById('micStatus'),
+  speakerStatus: document.getElementById('speakerStatus'),
+  recordStatus: document.getElementById('recordStatus'),
+  startBtn: document.getElementById('startBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+  recordBtn: document.getElementById('recordBtn'),
+  modelSelect: document.getElementById('modelSelect'),
+  micSelect: document.getElementById('micSelect'),
+  transcriptStream: document.getElementById('transcriptStream'),
+  noteHighlights: document.getElementById('noteHighlights'),
+  noteList: document.getElementById('noteList'),
+  createNoteBtn: document.getElementById('createNoteBtn'),
+  noteSearch: document.getElementById('noteSearch'),
+  clearAllNotesBtn: document.getElementById('clearAllNotesBtn'),
+  noteTitleInput: document.getElementById('noteTitle'),
+  noteTimestamp: document.getElementById('noteTimestamp'),
+  noteStatusCopy: document.getElementById('noteStatusCopy'),
+  archiveNoteBtn: document.getElementById('archiveNoteBtn'),
+  exportMarkdownBtn: document.getElementById('exportMarkdownBtn'),
+  exportPdfBtn: document.getElementById('exportPdfBtn'),
+  languageSelect: document.getElementById('languageSelect'),
+  promptInput: document.getElementById('promptInput'),
+  silenceInput: document.getElementById('silenceInput')
+};
+
+const {
+  micStatus,
+  speakerStatus,
+  recordStatus,
+  startBtn,
+  stopBtn,
+  recordBtn,
+  modelSelect,
+  micSelect,
+  transcriptStream,
+  noteHighlights,
+  noteList,
+  createNoteBtn,
+  noteSearch,
+  clearAllNotesBtn,
+  noteTitleInput,
+  noteTimestamp,
+  noteStatusCopy,
+  archiveNoteBtn,
+  exportMarkdownBtn,
+  exportPdfBtn,
+  languageSelect,
+  promptInput,
+  silenceInput
+} = domElements;
+
+function generateId(prefix = 'entry') {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function persistNotes() {
+  localStorage.setItem(STORAGE_KEYS.notes, JSON.stringify(state.notes));
+  if (state.activeNoteId) {
+    localStorage.setItem(STORAGE_KEYS.activeNote, state.activeNoteId);
+  }
+}
+
+function loadNotes() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.notes);
+    state.notes = stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.warn('Failed to load saved notes; starting fresh.', error);
+    state.notes = [];
+  }
+
+  state.notes = state.notes.map(note => ({
+    transcript: [],
+    highlightsHtml: '',
+    archived: false,
+    ...note,
+    transcript: note.transcript || [],
+    highlightsHtml: note.highlightsHtml || '',
+    archived: Boolean(note.archived)
+  }));
+
+  const storedActive = localStorage.getItem(STORAGE_KEYS.activeNote);
+  if (storedActive && state.notes.some(note => note.id === storedActive)) {
+    state.activeNoteId = storedActive;
+  }
+}
+
+function loadPreferences() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.settings);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      state.preferences = {
+        ...DEFAULT_PREFERENCES,
+        ...parsed,
+        silenceSeconds: sanitizeSilenceSeconds(parsed?.silenceSeconds ?? DEFAULT_PREFERENCES.silenceSeconds)
+      };
+      return;
+    }
+  } catch (error) {
+    console.warn('Failed to load preferences; using defaults.', error);
+  }
+  state.preferences = { ...DEFAULT_PREFERENCES };
+}
+
+function persistPreferences() {
+  localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(state.preferences));
+}
+
+function getActiveNote() {
+  return state.notes.find(note => note.id === state.activeNoteId) || null;
+}
+
+function formatTimestamp(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function relativeLabel(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return 'just now';
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+}
+
+function renderNoteList() {
+  noteList.innerHTML = '';
+  const term = noteSearch.value.trim().toLowerCase();
+
+  const filtered = state.notes
+    .slice()
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+    .filter(note => {
+      if (!term) return true;
+      const haystack = [note.title || '', note.highlightsHtml || '', ...(note.transcript || []).map(entry => entry.text || '')]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(term);
     });
+
+  if (filtered.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'note-item';
+    empty.textContent = term ? 'No notes match that search.' : 'No notes yet — create a live note to get started.';
+    noteList.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach(note => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `note-item${note.id === state.activeNoteId ? ' active' : ''}`;
+    item.dataset.noteId = note.id;
+
+    const title = document.createElement('div');
+    title.className = 'note-item-title';
+    title.textContent = note.title || 'Untitled note';
+
+    const meta = document.createElement('div');
+    meta.className = 'note-item-meta';
+    const updated = note.updatedAt || note.createdAt;
+    meta.textContent = `${note.archived ? 'Archived' : 'Active'} • ${relativeLabel(updated)}`;
+
+    item.appendChild(title);
+    item.appendChild(meta);
+
+    item.addEventListener('click', () => setActiveNote(note.id));
+    noteList.appendChild(item);
+  });
 }
 
-// Update status display
-function updateStatus(streamType, isConnected) {
-    const statusElement = streamType === 'microphone' ? micStatus : speakerStatus;
-    const label = streamType === 'microphone' ? 'Microphone' : 'System Audio';
+function ensureCapturePreconditions(note) {
+  if (!note) {
+    alert('Create or select a note before starting capture.');
+    return false;
+  }
 
-    if (isConnected) {
-        statusElement.textContent = `${label}: Connected`;
-        statusElement.className = 'status connected';
-    } else {
-        statusElement.textContent = `${label}: Disconnected`;
-        statusElement.className = 'status disconnected';
-    }
+  if (note.archived) {
+    alert('Unarchive the note before resuming capture.');
+    return false;
+  }
+
+  if (!window.electronAPI?.apiKey) {
+    alert('Missing OpenAI API key. Add it to your .env file as OPENAI_KEY.');
+    return false;
+  }
+
+  return true;
 }
 
-// Handle messages from microphone session
-function handleMicrophoneMessage(parsed) {
-    console.log('Received microphone message:', parsed);
-    let transcript = null;
-
-    switch (parsed.type) {
-        case "transcription_session.created":
-            microphoneSessionConfig = parsed.session;
-            console.log("microphone session created: " + microphoneSessionConfig.id);
-            break;
-        case "input_audio_buffer.speech_started":
-            transcript = {
-                transcript: '...',
-                partial: true,
-            }
-            handleMicrophoneTranscript(transcript);
-            break;
-        case "input_audio_buffer.speech_stopped":
-            transcript = {
-                transcript: '...',
-                partial: true,
-            }
-            handleMicrophoneTranscript(transcript);
-            microphoneVadTime = performance.now() - microphoneSessionConfig.turn_detection.silence_duration_ms;
-            break;
-        case "conversation.item.input_audio_transcription.completed":
-            const elapsed = performance.now() - microphoneVadTime;
-            transcript = {
-                transcript: parsed.transcript,
-                partial: false,
-                latencyMs: elapsed.toFixed(0)
-            }
-            handleMicrophoneTranscript(transcript);
-            break;
-    }
-}
-
-// Handle messages from system audio session
-function handleSystemAudioMessage(parsed) {
-    console.log('Received system audio message:', parsed);
-    let transcript = null;
-
-    switch (parsed.type) {
-        case "transcription_session.created":
-            systemAudioSessionConfig = parsed.session;
-            console.log("system audio session created: " + systemAudioSessionConfig.id);
-            break;
-        case "input_audio_buffer.speech_started":
-            transcript = {
-                transcript: '...',
-                partial: true,
-            }
-            handleSystemAudioTranscript(transcript);
-            break;
-        case "input_audio_buffer.speech_stopped":
-            transcript = {
-                transcript: '...',
-                partial: true,
-            }
-            handleSystemAudioTranscript(transcript);
-            systemAudioVadTime = performance.now() - systemAudioSessionConfig.turn_detection.silence_duration_ms;
-            break;
-        case "conversation.item.input_audio_transcription.completed":
-            const elapsed = performance.now() - systemAudioVadTime;
-            transcript = {
-                transcript: parsed.transcript,
-                partial: false,
-                latencyMs: elapsed.toFixed(0)
-            }
-            handleSystemAudioTranscript(transcript);
-            break;
-    }
-}
-
-// Handle microphone transcript updates
-function handleMicrophoneTranscript(transcript) {
-    const text = transcript.transcript;
-    if (!text) {
-        return;
-    }
-
-    const timestamp = new Date().toLocaleTimeString();
-    const prefix = transcript.partial ? '' : `[${timestamp}]`;
-
-    micResults.textContent += `${prefix} ${text}\n`;
-    micResults.scrollTop = micResults.scrollHeight;
-}
-
-// Handle system audio transcript updates
-function handleSystemAudioTranscript(transcript) {
-    const text = transcript.transcript;
-    if (!text) {
-        return;
-    }
-
-    const timestamp = new Date().toLocaleTimeString();
-    const prefix = transcript.partial ? '' : `[${timestamp}]`;
-
-    speakerResults.textContent += `${prefix} ${text}\n`;
-    speakerResults.scrollTop = speakerResults.scrollHeight;
-}
-
-// Handle errors
-function handleError(e, streamType) {
-    console.error(`${streamType} session error:`, e);
-    alert(`Error (${streamType}): ` + e.message);
-    stop();
-}
-
-// Start transcription
-async function start() {
+function stripVideoTracks(stream) {
+  stream.getVideoTracks().forEach(track => {
     try {
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        modelSelect.disabled = true;
-
-        // Get microphone stream
-        microphoneStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                deviceId: {
-                    exact: micSelect.value
-                }
-            },
-            video: false
-        });
-
-        await window.electronAPI.enableLoopbackAudio();
-
-        // Get display media (system audio)
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
-            audio: true,
-            video: true
-        });
-
-        await window.electronAPI.disableLoopbackAudio();
-
-        // Remove video tracks, keep only audio
-        const videoTracks = displayStream.getTracks().filter(t => t.kind === 'video');
-        videoTracks.forEach(t => t.stop() && displayStream.removeTrack(t));
-
-        systemAudioStream = displayStream;
-
-        // Create microphone session
-        microphoneSession = new Session(window.electronAPI.apiKey, 'microphone');
-        microphoneSession.onconnectionstatechange = state => {
-            console.log('Microphone connection state:', state);
-            updateStatus('microphone', state === 'connected');
-        };
-        microphoneSession.onmessage = handleMicrophoneMessage;
-        microphoneSession.onerror = (e) => handleError(e, 'microphone');
-
-        // Create system audio session
-        systemAudioSession = new Session(window.electronAPI.apiKey, 'system_audio');
-        systemAudioSession.onconnectionstatechange = state => {
-            console.log('System audio connection state:', state);
-            updateStatus('speaker', state === 'connected');
-        };
-        systemAudioSession.onmessage = handleSystemAudioMessage;
-        systemAudioSession.onerror = (e) => handleError(e, 'system_audio');
-
-        // Configure sessions
-        const sessionConfig = {
-            input_audio_transcription: {
-                model: modelSelect.value,
-                prompt: "",
-            },
-            turn_detection: {
-                type: "server_vad",
-                silence_duration_ms: 10,
-            }
-        };
-
-        // Start transcription with both streams
-        await Promise.all([
-            microphoneSession.startTranscription(microphoneStream, sessionConfig),
-            systemAudioSession.startTranscription(displayStream, sessionConfig)
-        ]);
-
-        // Enable record button
-        recordBtn.disabled = false;
-        console.log('Transcription started for both streams');
-
+      track.stop();
+      stream.removeTrack(track);
     } catch (error) {
-        console.error('Error starting transcription:', error);
-        alert('Error starting transcription: ' + error.message);
-        stop();
+      console.warn('Unable to remove video track:', error);
     }
+  });
 }
 
-// Stop transcription
-function stop() {
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    recordBtn.disabled = true;
-    modelSelect.disabled = false;
+async function captureMediaStreams() {
+  const microphone = await navigator.mediaDevices.getUserMedia({
+    audio: micSelect.value ? { deviceId: { exact: micSelect.value } } : true,
+    video: false
+  });
 
-    // Stop recording if active
-    if (wavRecorder.isRecording) {
-        wavRecorder.stopRecording();
-        updateRecordStatus(false);
-    }
+  await window.electronAPI.enableLoopbackAudio();
+  let displayStream;
+  try {
+    displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+  } finally {
+    await window.electronAPI.disableLoopbackAudio();
+  }
 
-    microphoneSession?.stop();
-    microphoneSession = null;
-    microphoneSessionConfig = null;
-
-    systemAudioSession?.stop();
-    systemAudioSession = null;
-    systemAudioSessionConfig = null;
-
-    // Stop and clean up streams
-    microphoneStream?.getTracks().forEach(t => t.stop());
-    systemAudioStream?.getTracks().forEach(t => t.stop());
-    microphoneStream = null;
-    systemAudioStream = null;
-
-    updateStatus('microphone', false);
-    updateStatus('speaker', false);
-    updateRecordStatus(false);
-
-    const timestamp = new Date().toLocaleTimeString();
-    micResults.textContent = `[${timestamp}] Waiting for microphone input...\n`;
-    speakerResults.textContent = `[${timestamp}] Waiting for system audio...\n`;
+  stripVideoTracks(displayStream);
+  return { microphone, systemAudio: displayStream };
 }
 
-// Update record status display
+function buildSessionConfig() {
+  const transcription = {
+    model: modelSelect.value,
+    prompt: state.preferences.prompt?.trim(),
+    language: state.preferences.language || 'id'
+  };
+
+  const config = {
+    input_audio_transcription: {
+      model: transcription.model
+    },
+    turn_detection: {
+      type: 'server_vad',
+      silence_duration_ms: Math.round(state.preferences.silenceSeconds * 1000)
+    }
+  };
+
+  if (transcription.prompt) {
+    config.input_audio_transcription.prompt = transcription.prompt;
+  }
+
+  if (transcription.language) {
+    config.input_audio_transcription.language = transcription.language;
+  }
+
+  return config;
+}
+
+function createRealtimeSession(type) {
+  const meta = STREAM_META[type];
+  const session = new Session(window.electronAPI.apiKey, type);
+  session.onconnectionstatechange = stateValue => updateStatus(meta.statusId, stateValue === 'connected');
+  session.onmessage = parsed => handleStreamMessage(meta.messageSource, parsed);
+  session.onerror = error => handleCaptureError(error, meta.errorLabel);
+  return session;
+}
+
+async function setupRealtimeSessions(sessionConfig) {
+  microphoneSession = createRealtimeSession('microphone');
+  systemAudioSession = createRealtimeSession('system_audio');
+
+  await Promise.all([
+    microphoneSession.startTranscription(microphoneStream, sessionConfig),
+    systemAudioSession.startTranscription(systemAudioStream, sessionConfig)
+  ]);
+}
+
+function ensurePlaceholder() {
+  if (transcriptStream.children.length === 0) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'transcript-entry';
+    placeholder.dataset.placeholder = 'true';
+    placeholder.innerHTML = `
+      <div class="entry-header"><span class="pill">Waiting for capture…</span></div>
+      <div class="entry-text">Choose a note and press “Start capture” to begin transcribing.</div>
+    `;
+    transcriptStream.appendChild(placeholder);
+  }
+}
+
+function createTranscriptElement(entry, options = {}) {
+  const { isDraft = false, statusLabel } = options;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'transcript-entry';
+  wrapper.dataset.entryId = entry.id;
+  wrapper.dataset.source = entry.source;
+  if (isDraft) {
+    wrapper.dataset.draft = 'true';
+  }
+
+  const header = document.createElement('div');
+  header.className = 'entry-header';
+
+  const sourcePill = document.createElement('span');
+  sourcePill.className = `pill ${entry.source === 'microphone' ? 'microphone' : 'speaker'}`;
+  sourcePill.textContent = entry.source === 'microphone' ? 'Microphone' : 'System audio';
+  header.appendChild(sourcePill);
+
+  const statusSpan = document.createElement('span');
+  statusSpan.className = 'entry-status';
+  if (statusLabel) {
+    statusSpan.textContent = statusLabel;
+  } else {
+    statusSpan.style.display = 'none';
+  }
+  header.appendChild(statusSpan);
+
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'entry-timestamp';
+  timeSpan.textContent = formatTimestamp(entry.timestamp);
+  header.appendChild(timeSpan);
+
+  const body = document.createElement('div');
+  body.className = 'entry-text';
+  body.textContent = entry.text;
+
+  wrapper.appendChild(header);
+  wrapper.appendChild(body);
+  return wrapper;
+}
+
+function renderTranscript(note) {
+  transcriptStream.innerHTML = '';
+  if (!note || !note.transcript || note.transcript.length === 0) {
+    ensurePlaceholder();
+    return;
+  }
+
+  note.transcript.forEach(entry => {
+    transcriptStream.appendChild(createTranscriptElement(entry));
+  });
+  transcriptStream.scrollTop = transcriptStream.scrollHeight;
+}
+
+function renderActiveNote() {
+  const note = getActiveNote();
+  noteTitleInput.value = note ? note.title : '';
+  noteHighlights.innerHTML = note ? note.highlightsHtml || '' : '';
+
+  if (note) {
+    const created = formatTimestamp(note.createdAt);
+    const updated = note.updatedAt && note.updatedAt !== note.createdAt ? ` · Updated ${formatTimestamp(note.updatedAt)}` : '';
+    noteTimestamp.textContent = `Created ${created}${updated}`;
+    archiveNoteBtn.textContent = note.archived ? 'Unarchive note' : 'Archive note';
+    archiveNoteBtn.disabled = false;
+  } else {
+    noteTimestamp.textContent = 'No note selected';
+    archiveNoteBtn.textContent = 'Archive note';
+    archiveNoteBtn.disabled = true;
+  }
+
+  renderTranscript(note);
+  updateNoteStatus();
+  syncControlAvailability();
+}
+
+function updateNoteStatus() {
+  const note = getActiveNote();
+  if (!note) {
+    noteStatusCopy.textContent = 'Create or select a note to begin.';
+    return;
+  }
+
+  if (note.archived) {
+    noteStatusCopy.textContent = 'Archived note — unarchive to resume capture.';
+    return;
+  }
+
+  if (state.isCapturing) {
+    const languageLabel = LANGUAGE_LABELS[state.preferences.language] || state.preferences.language.toUpperCase();
+    noteStatusCopy.textContent = `Capturing audio (${languageLabel}, idle ≥ ${state.preferences.silenceSeconds}s).`;
+  } else {
+    const languageLabel = LANGUAGE_LABELS[state.preferences.language] || state.preferences.language.toUpperCase();
+    noteStatusCopy.textContent = `Ready — press “Start capture” to transcribe in ${languageLabel}.`;
+  }
+}
+
+function syncControlAvailability() {
+  const note = getActiveNote();
+  const canCapture = Boolean(note && !note.archived);
+  startBtn.disabled = state.isCapturing || !canCapture;
+  stopBtn.disabled = !state.isCapturing;
+  recordBtn.disabled = !state.isCapturing;
+  micSelect.disabled = state.isCapturing;
+  modelSelect.disabled = state.isCapturing;
+  languageSelect.disabled = state.isCapturing;
+  silenceInput.disabled = state.isCapturing;
+  promptInput.disabled = false;
+}
+
+function appendFinalTranscript(source, text) {
+  const note = getActiveNote();
+  if (!note) return;
+
+  note.transcript = note.transcript || [];
+  const entry = {
+    id: generateId('entry'),
+    source,
+    text,
+    timestamp: new Date().toISOString()
+  };
+  note.transcript.push(entry);
+  note.updatedAt = new Date().toISOString();
+  persistNotes();
+  renderTranscript(note);
+  renderNoteList();
+  updateNoteStatus();
+}
+
+function beginDraft(source, initialText, statusLabel) {
+  const note = getActiveNote();
+  if (!note) return;
+
+  const placeholder = transcriptStream.querySelector('[data-placeholder="true"]');
+  if (placeholder) {
+    placeholder.remove();
+  }
+
+  const draftEntry = {
+    id: generateId('draft'),
+    source,
+    text: initialText,
+    timestamp: new Date().toISOString()
+  };
+
+  const element = createTranscriptElement(draftEntry, { isDraft: true, statusLabel });
+  transcriptStream.appendChild(element);
+  transcriptStream.scrollTop = transcriptStream.scrollHeight;
+
+  state.drafts[source] = {
+    id: draftEntry.id,
+    element
+  };
+}
+
+function updateDraft(source, text, statusLabel) {
+  const draft = state.drafts[source];
+  if (!draft) return;
+
+  const body = draft.element.querySelector('.entry-text');
+  if (body) {
+    body.textContent = text;
+  }
+
+  const statusSpan = draft.element.querySelector('.entry-status');
+  if (statusSpan) {
+    if (statusLabel) {
+      statusSpan.style.display = '';
+      statusSpan.textContent = statusLabel;
+    } else {
+      statusSpan.style.display = 'none';
+      statusSpan.textContent = '';
+    }
+  }
+
+  const timestampSpan = draft.element.querySelector('.entry-timestamp');
+  if (timestampSpan) {
+    timestampSpan.textContent = formatTimestamp(new Date().toISOString());
+  }
+}
+
+function finalizeDraft(source, text) {
+  const draft = state.drafts[source];
+  if (draft) {
+    draft.element.remove();
+    state.drafts[source] = null;
+  }
+  appendFinalTranscript(source, text);
+}
+
+function handleStreamMessage(source, message) {
+  switch (message.type) {
+    case 'transcription_session.created':
+      console.log(`${source} session created:`, message.session?.id);
+      break;
+    case 'input_audio_buffer.speech_started':
+      beginDraft(source, 'Listening…', 'Listening…');
+      break;
+    case 'input_audio_buffer.speech_stopped':
+      updateDraft(source, 'Processing…', 'Processing…');
+      break;
+    case 'conversation.item.input_audio_transcription.completed':
+      finalizeDraft(source, message.transcript);
+      break;
+    default:
+      break;
+  }
+}
+
+function updateStatus(streamType, isConnected) {
+  const element = streamType === 'microphone' ? micStatus : speakerStatus;
+  const label = streamType === 'microphone' ? 'Microphone' : 'System audio';
+  element.className = `pill ${streamType === 'microphone' ? 'microphone' : 'speaker'} ${isConnected ? 'connected' : 'disconnected'}`;
+  element.textContent = isConnected ? `${label} live` : `${label} offline`;
+}
+
 function updateRecordStatus(isRecording) {
-    if (isRecording) {
-        recordStatus.textContent = 'Recording: Active';
-        recordStatus.className = 'status connected';
-        recordBtn.textContent = 'Stop Recording';
-    } else {
-        recordStatus.textContent = 'Recording: Stopped';
-        recordStatus.className = 'status disconnected';
-        recordBtn.textContent = 'Start Recording';
-    }
+  recordStatus.className = `pill recording ${isRecording ? 'connected' : 'disconnected'}`;
+  recordStatus.textContent = isRecording ? 'Backup recording active' : 'Backup recording idle';
+  recordBtn.textContent = isRecording ? 'Stop backup recording' : 'Start backup recording';
 }
 
-// Handle recording button click
+async function start() {
+  const note = getActiveNote();
+  if (!ensureCapturePreconditions(note)) {
+    return;
+  }
+
+  state.isCapturing = true;
+  syncControlAvailability();
+  updateNoteStatus();
+
+  try {
+    const streams = await captureMediaStreams();
+    microphoneStream = streams.microphone;
+    systemAudioStream = streams.systemAudio;
+
+    const sessionConfig = buildSessionConfig();
+    await setupRealtimeSessions(sessionConfig);
+
+    updateStatus('microphone', true);
+    updateStatus('speaker', true);
+    updateNoteStatus();
+    syncControlAvailability();
+  } catch (error) {
+    console.error('Error starting capture:', error);
+    alert(`Error starting capture: ${error.message}`);
+    stop();
+  }
+}
+
+function handleCaptureError(error, streamType) {
+  console.error(`${streamType} session error:`, error);
+  alert(`Error (${streamType}): ${error.message}`);
+  stop();
+}
+
+function stop() {
+  if (!state.isCapturing && !microphoneSession && !systemAudioSession) {
+    syncControlAvailability();
+    updateNoteStatus();
+    return;
+  }
+
+  state.isCapturing = false;
+
+  microphoneSession?.stop();
+  systemAudioSession?.stop();
+  microphoneSession = null;
+  systemAudioSession = null;
+
+  microphoneStream?.getTracks().forEach(track => track.stop());
+  systemAudioStream?.getTracks().forEach(track => track.stop());
+  microphoneStream = null;
+  systemAudioStream = null;
+
+  state.drafts.microphone = null;
+  state.drafts.speaker = null;
+
+  updateStatus('microphone', false);
+  updateStatus('speaker', false);
+
+  if (wavRecorder.isRecording) {
+    wavRecorder.stopRecording();
+  }
+  updateRecordStatus(false);
+
+  syncControlAvailability();
+  updateNoteStatus();
+  ensurePlaceholder();
+}
+
 async function toggleRecording() {
+  try {
     if (!wavRecorder.isRecording) {
-        try {
-            await wavRecorder.startRecording(microphoneStream, systemAudioStream);
-            updateRecordStatus(true);
-        } catch (error) {
-            console.error('Error starting recording:', error);
-            alert('Error starting recording: ' + error.message);
-        }
+      await wavRecorder.startRecording(microphoneStream, systemAudioStream);
+      updateRecordStatus(true);
     } else {
-        wavRecorder.stopRecording();
-        updateRecordStatus(false);
+      wavRecorder.stopRecording();
+      updateRecordStatus(false);
     }
+  } catch (error) {
+    console.error('Error controlling recording:', error);
+    alert(error.message);
+  }
 }
 
-// Add event listeners
-startBtn.addEventListener('click', start);
-stopBtn.addEventListener('click', stop);
-recordBtn.addEventListener('click', toggleRecording);
-updateMicSelect();
+function createNote() {
+  const now = new Date().toISOString();
+  const note = {
+    id: generateId('note'),
+    title: `Live note — ${new Date().toLocaleDateString()}`,
+    createdAt: now,
+    updatedAt: now,
+    highlightsHtml: '',
+    transcript: [],
+    archived: false
+  };
+  state.notes.push(note);
+  state.activeNoteId = note.id;
+  persistNotes();
+  renderNoteList();
+  renderActiveNote();
+  noteTitleInput.focus();
+}
 
-// Cleanup on page unload
-window.addEventListener('beforeunload', stop);
+function setActiveNote(noteId) {
+  if (state.isCapturing && state.activeNoteId !== noteId) {
+    const proceed = confirm('Switching notes will stop the current capture. Continue?');
+    if (!proceed) {
+      return;
+    }
+    stop();
+  }
+  state.activeNoteId = noteId;
+  persistNotes();
+  renderNoteList();
+  renderActiveNote();
+}
+
+function archiveActiveNote() {
+  const note = getActiveNote();
+  if (!note) return;
+
+  if (state.isCapturing) {
+    stop();
+  }
+
+  note.archived = !note.archived;
+  note.updatedAt = new Date().toISOString();
+  persistNotes();
+  renderNoteList();
+  renderActiveNote();
+}
+
+function clearArchivedNotes() {
+  const hasArchived = state.notes.some(note => note.archived);
+  if (!hasArchived) {
+    alert('No archived notes to clear.');
+    return;
+  }
+  const confirmClear = confirm('This will permanently delete all archived notes. Continue?');
+  if (!confirmClear) {
+    return;
+  }
+
+  state.notes = state.notes.filter(note => !note.archived);
+  if (!state.notes.some(note => note.id === state.activeNoteId)) {
+    state.activeNoteId = state.notes[0]?.id || null;
+  }
+  persistNotes();
+  renderNoteList();
+  renderActiveNote();
+}
+
+function updateNoteTitle(value) {
+  const note = getActiveNote();
+  if (!note) return;
+  note.title = value || 'Untitled note';
+  note.updatedAt = new Date().toISOString();
+  persistNotes();
+  renderNoteList();
+}
+
+function updateHighlights() {
+  const note = getActiveNote();
+  if (!note) return;
+  note.highlightsHtml = noteHighlights.innerHTML;
+  note.updatedAt = new Date().toISOString();
+  persistNotes();
+  renderNoteList();
+}
+
+function sanitizeSilenceSeconds(value) {
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    return DEFAULT_PREFERENCES.silenceSeconds;
+  }
+  return Math.min(30, Math.max(1, Number(numeric.toFixed(2))));
+}
+
+function renderPreferences() {
+  languageSelect.value = state.preferences.language;
+  promptInput.value = state.preferences.prompt;
+  silenceInput.value = state.preferences.silenceSeconds;
+}
+
+function attachPreferenceListeners() {
+  languageSelect.addEventListener('change', event => {
+    state.preferences.language = event.target.value || DEFAULT_PREFERENCES.language;
+    persistPreferences();
+    updateNoteStatus();
+  });
+
+  promptInput.addEventListener('input', event => {
+    state.preferences.prompt = event.target.value;
+    persistPreferences();
+  });
+
+  silenceInput.addEventListener('change', event => {
+    const sanitized = sanitizeSilenceSeconds(event.target.value);
+    state.preferences.silenceSeconds = sanitized;
+    silenceInput.value = sanitized;
+    persistPreferences();
+    updateNoteStatus();
+  });
+
+  silenceInput.addEventListener('input', event => {
+    const sanitized = sanitizeSilenceSeconds(event.target.value);
+    event.target.value = sanitized;
+  });
+}
+
+function exportActiveNoteAsMarkdown() {
+  const note = getActiveNote();
+  if (!note) {
+    alert('Select a note to export.');
+    return;
+  }
+
+  const lines = [];
+  lines.push(`# ${note.title || 'Untitled note'}`);
+  lines.push('');
+  lines.push(`Created: ${formatTimestamp(note.createdAt)}`);
+  if (note.updatedAt && note.updatedAt !== note.createdAt) {
+    lines.push(`Updated: ${formatTimestamp(note.updatedAt)}`);
+  }
+  lines.push('');
+  lines.push('## Transcript');
+  lines.push('');
+  const transcriptEntries = note.transcript || [];
+
+  if (transcriptEntries.length === 0) {
+    lines.push('_No transcript captured yet._');
+  } else {
+    transcriptEntries.forEach(entry => {
+      const sourceLabel = entry.source === 'microphone' ? 'Microphone' : 'System audio';
+      lines.push(`- **${sourceLabel} (${formatTimestamp(entry.timestamp)}):** ${entry.text}`);
+    });
+  }
+
+  if (note.highlightsHtml) {
+    lines.push('');
+    lines.push('## Highlights');
+    lines.push('');
+    const temp = document.createElement('div');
+    temp.innerHTML = note.highlightsHtml;
+    const textContent = temp.innerText.trim();
+    lines.push(textContent || '_No highlights yet._');
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${(note.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${note.id}.md`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function exportActiveNoteAsPdf() {
+  const note = getActiveNote();
+  if (!note) {
+    alert('Select a note to export.');
+    return;
+  }
+
+  const printWindow = window.open('', '_blank', 'width=900,height=800');
+  if (!printWindow) {
+    alert('Unable to open print preview. Disable pop-up blockers and try again.');
+    return;
+  }
+
+  const transcriptEntries = note.transcript || [];
+
+  const transcriptHtml = transcriptEntries.map(entry => (
+    `<div style="margin-bottom:12px;">
+      <div style="font-size:12px;color:#555;">
+        <strong>${entry.source === 'microphone' ? 'Microphone' : 'System audio'}</strong>
+        · ${formatTimestamp(entry.timestamp)}
+      </div>
+      <div style="font-size:14px;line-height:1.5;">${entry.text}</div>
+    </div>`
+  )).join('') || '<em>No transcript captured yet.</em>';
+
+  const highlights = note.highlightsHtml ? `<h2>Highlights</h2><div>${note.highlightsHtml}</div>` : '';
+
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>${note.title}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 32px; color: #111; }
+          h1 { margin-bottom: 4px; }
+          h2 { margin-top: 32px; }
+        </style>
+      </head>
+      <body>
+        <h1>${note.title || 'Untitled note'}</h1>
+        <p>Created: ${formatTimestamp(note.createdAt)}${note.updatedAt ? `<br/>Updated: ${formatTimestamp(note.updatedAt)}` : ''}</p>
+        <h2>Transcript</h2>
+        ${transcriptHtml}
+        ${highlights}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+function updateMicSelect() {
+  navigator.mediaDevices.enumerateDevices()
+    .then(devices => {
+      micSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Default microphone';
+      micSelect.appendChild(placeholder);
+
+      devices.forEach(device => {
+        if (device.kind === 'audioinput') {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.textContent = device.label || `Microphone ${micSelect.length}`;
+          micSelect.appendChild(option);
+        }
+      });
+    })
+    .catch(error => console.warn('Unable to enumerate microphones', error));
+}
+
+function initialize() {
+  loadPreferences();
+  loadNotes();
+
+  if (state.notes.length === 0) {
+    createNote();
+  } else {
+    if (!state.activeNoteId) {
+      state.activeNoteId = state.notes[0].id;
+    }
+    renderNoteList();
+    renderActiveNote();
+  }
+
+  createNoteBtn.addEventListener('click', createNote);
+  noteSearch.addEventListener('input', renderNoteList);
+  clearAllNotesBtn.addEventListener('click', clearArchivedNotes);
+  startBtn.addEventListener('click', start);
+  stopBtn.addEventListener('click', stop);
+  recordBtn.addEventListener('click', toggleRecording);
+  archiveNoteBtn.addEventListener('click', archiveActiveNote);
+  exportMarkdownBtn.addEventListener('click', exportActiveNoteAsMarkdown);
+  exportPdfBtn.addEventListener('click', exportActiveNoteAsPdf);
+
+  noteTitleInput.addEventListener('input', event => updateNoteTitle(event.target.value));
+  noteHighlights.addEventListener('input', updateHighlights);
+
+  window.addEventListener('beforeunload', () => {
+    if (state.isCapturing) {
+      stop();
+    }
+  });
+
+  updateMicSelect();
+  ensurePlaceholder();
+  renderPreferences();
+  attachPreferenceListeners();
+}
+
+document.addEventListener('DOMContentLoaded', initialize);

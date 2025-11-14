@@ -3,128 +3,522 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Mic & Speaker Streamer</title>
+  <title>Noteworthy — Automatic Notes</title>
   <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f5f3;
+      --panel: #ffffff;
+      --soft-border: #e1e1dd;
+      --text-primary: #1f1f1f;
+      --text-secondary: #575757;
+      --accent: #3b82f6;
+      --accent-soft: rgba(59, 130, 246, 0.1);
+      --microphone: #6366f1;
+      --speaker: #10b981;
+      --outline: rgba(31, 31, 31, 0.05);
+      --danger: #ef4444;
+      font-size: 15px;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: sans-serif;
       margin: 0;
+      background: var(--bg);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      width: 100%;
+    }
+
+    .sidebar {
+      background: #fafafa;
+      border-right: 1px solid var(--soft-border);
+      padding: 24px 20px 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .brand-title {
+      font-size: 1.4em;
+      font-weight: 600;
+    }
+
+    .brand-subtitle {
+      font-size: 0.85em;
+      color: var(--text-secondary);
+    }
+
+    .note-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .note-search {
+      position: relative;
+    }
+
+    .note-search input {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--soft-border);
+      background: #fff;
+      font-size: 0.95em;
+    }
+
+    .primary-btn {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .primary-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.22);
+    }
+
+    .plain-btn {
       padding: 0;
-      background: #212121;
-      color: white;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.95em;
     }
 
-    .container {
-      max-width: 600px;
-      margin: 32px auto;
-      padding: 0 12px;
+    .note-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      scrollbar-width: thin;
     }
 
-    h1 {
-      font-size: 1.5em;
-      margin: 24px 0 16px 0;
-      color: rgba(255, 255, 255, 0.85);
+    .note-item {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-start;
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
     }
 
-    .controls {
+    .note-item.active {
+      background: #fff;
+      border-color: var(--soft-border);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .note-item:hover {
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .note-item-title {
+      font-weight: 600;
+      font-size: 0.95em;
+    }
+
+    .note-item-meta {
+      font-size: 0.75em;
+      color: var(--text-secondary);
+    }
+
+    .main {
+      padding: 32px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .note-header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .note-title {
+      font-size: 1.8em;
+      font-weight: 600;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 4px 0;
+      width: 100%;
+    }
+
+    .note-meta {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+      font-size: 0.85em;
+      color: var(--text-secondary);
     }
 
-    button,
-    select {
-      font-size: 1em;
-      margin-right: 8px;
-      padding: 6px 12px;
-      background-color: rgba(255, 255, 255, 0.1);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 4px;
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 500;
     }
 
-    button:disabled,
-    select:disabled {
-      background-color: rgba(255, 255, 255, 0.05);
-      color: rgba(255, 255, 255, 0.5);
-      border-color: rgba(255, 255, 255, 0.05);
-    }
-
-    .status {
-      margin: 8px 0;
-      padding: 4px 8px;
-      font-size: 0.95em;
-      transition: background-color 0.3s ease;
-    }
-
-    .status.connected {
-      background-color: rgba(65, 152, 35, 0.484);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 4px;
-    }
-
-    .status.disconnected {
-      background-color: rgba(94, 19, 19, 0.445);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 4px;
-    }
-
-    .results {
-      margin: 12px 0 24px 0;
-      padding: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 4px;
-      min-height: 100px;
-      max-height: 100px;
-      background: rgba(255, 255, 255, 0.1);
-      color: white;
-      font-family: monospace;
-      font-size: 1em;
-      white-space: pre-wrap;
-      overflow-y: scroll;
-    }
-
-    .section {
-      margin: 18px 0 6px 0;
-      font-weight: bold;
-      text-transform: uppercase;
-      font-size: 0.7em;
-      letter-spacing: 0.08em;
-      color: rgba(255, 255, 255, 0.65);
-    }
-
-    .status-row {
+    .section-card {
+      background: var(--panel);
+      border-radius: 18px;
+      padding: 20px;
+      border: 1px solid var(--soft-border);
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-title {
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .control-row {
+      display: flex;
+      flex-wrap: wrap;
       gap: 12px;
+      align-items: center;
+    }
+
+    .preferences-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .preference-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .preference-label {
+      font-size: 0.78em;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .preference-input {
+      min-width: 160px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--soft-border);
+      background: #fff;
+      font-size: 0.95em;
+    }
+
+    .preference-input:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .silence-setting {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .silence-setting input {
+      width: 80px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--soft-border);
+      background: #fff;
+      font-size: 0.95em;
+    }
+
+    .microcopy {
+      font-size: 0.78em;
+      color: var(--text-secondary);
+    }
+
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.82em;
+      background: rgba(18, 18, 18, 0.05);
+      color: var(--text-secondary);
+    }
+
+    .pill.connected {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--speaker);
+      font-weight: 600;
+    }
+
+    .pill.disconnected {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    .pill.microphone {
+      color: var(--microphone);
+      background: rgba(99, 102, 241, 0.14);
+    }
+
+    .pill.speaker {
+      color: var(--speaker);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .pill.recording {
+      background: rgba(248, 113, 113, 0.12);
+      color: #dc2626;
+    }
+
+    select,
+    button.secondary-btn {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--soft-border);
+      background: #fff;
+      font-size: 0.95em;
+      cursor: pointer;
+    }
+
+    button.secondary-btn:disabled,
+    select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .transcript-stream {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 8px;
+      scrollbar-width: thin;
+    }
+
+    .transcript-entry {
+      border-radius: 14px;
+      border: 1px solid var(--soft-border);
+      padding: 14px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .entry-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8em;
+      color: var(--text-secondary);
+    }
+
+    .entry-text {
+      line-height: 1.5;
+      font-size: 1em;
+    }
+
+    .note-editor {
+      border-radius: 14px;
+      border: 1px solid var(--soft-border);
+      min-height: 180px;
+      padding: 16px;
+      background: #fff;
+      font-size: 1em;
+      line-height: 1.6;
+      outline: none;
+    }
+
+    .note-editor:empty::before {
+      content: "Capture quick highlights or context...";
+      color: var(--text-secondary);
+    }
+
+    .export-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    @media (max-width: 1080px) {
+      .app {
+        grid-template-columns: 240px 1fr;
+      }
+    }
+
+    @media (max-width: 880px) {
+      body {
+        display: block;
+      }
+
+      .app {
+        display: block;
+      }
+
+      .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--soft-border);
+        padding: 16px;
+      }
+
+      .main {
+        padding: 24px;
+      }
     }
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <h1>Mic & Speaker Streamer</h1>
-    <div class="controls">
-      <button id="startBtn" type="button">Start Streaming</button>
-      <button id="stopBtn" type="button" disabled>Stop Streaming</button>
-      <button id="recordBtn" type="button" disabled>Start Recording</button>
-      <select id="micSelect"></select>
-      <select id="modelSelect">
-        <option value="whisper-1">whisper-1</option>
-        <option value="gpt-4o-transcribe">GPT-4o-transcribe</option>
-        <option value="gpt-4o-mini-transcribe">GPT-4o-mini-transcribe</option>
-      </select>
-    </div>
-    <div class="status-row">
-      <div id="micStatus" class="status disconnected">Microphone: Disconnected</div>
-      <div id="speakerStatus" class="status disconnected">System Audio: Disconnected</div>
-      <div id="recordStatus" class="status disconnected">Recording: Stopped</div>
-    </div>
-    <div class="section">Microphone Transcription</div>
-    <pre class="results" id="micResults">Waiting for microphone input...</pre>
-    <div class="section">System Audio Transcription</div>
-    <pre class="results" id="speakerResults">Waiting for system audio...</pre>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-title">Noteworthy</span>
+        <span class="brand-subtitle">Automatic note catcher</span>
+      </div>
+      <div class="note-controls">
+        <button id="createNoteBtn" class="primary-btn" type="button">New Live Note</button>
+        <div class="note-search">
+          <input id="noteSearch" type="search" placeholder="Search notes" autocomplete="off" />
+        </div>
+      </div>
+      <div class="note-list" id="noteList"></div>
+      <button id="clearAllNotesBtn" class="plain-btn" type="button">Clear archived notes</button>
+    </aside>
+    <main class="main">
+      <section class="note-header">
+        <div class="title-row">
+          <input id="noteTitle" class="note-title" type="text" placeholder="Untitled note" />
+          <button id="exportMarkdownBtn" class="secondary-btn" type="button">Export Markdown</button>
+          <button id="exportPdfBtn" class="secondary-btn" type="button">Export PDF</button>
+        </div>
+        <div class="note-meta">
+          <span id="noteTimestamp">No note selected</span>
+          <span class="badge" id="comingSoon">Offline Whisper (whisper.cpp) — coming soon</span>
+        </div>
+      </section>
+
+      <section class="section-card">
+        <div class="section-title">Capture controls</div>
+        <div class="control-row">
+          <button id="startBtn" class="primary-btn" type="button">Start capture</button>
+          <button id="stopBtn" class="secondary-btn" type="button" disabled>Stop capture</button>
+          <button id="recordBtn" class="secondary-btn" type="button" disabled>Start backup recording</button>
+          <select id="micSelect"></select>
+          <select id="modelSelect">
+            <option value="whisper-1">whisper-1</option>
+            <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+            <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <span id="micStatus" class="pill disconnected">Microphone offline</span>
+          <span id="speakerStatus" class="pill disconnected">System audio offline</span>
+          <span id="recordStatus" class="pill">Recording idle</span>
+        </div>
+        <div class="preferences-row">
+          <div class="preference-group">
+            <label class="preference-label" for="languageSelect">Transcription language</label>
+            <select id="languageSelect" class="preference-input">
+              <option value="id" selected>Bahasa Indonesia</option>
+              <option value="en">English</option>
+              <option value="ms">Bahasa Melayu</option>
+              <option value="ja">日本語 (Japanese)</option>
+              <option value="ko">한국어 (Korean)</option>
+              <option value="zh">中文 (Chinese)</option>
+              <option value="es">Español</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+            </select>
+          </div>
+          <div class="preference-group" style="flex:1 1 220px;">
+            <label class="preference-label" for="promptInput">Context prompt (optional)</label>
+            <input id="promptInput" class="preference-input" type="text" placeholder="Misalnya: nama tim, glossary internal" />
+          </div>
+          <div class="preference-group">
+            <label class="preference-label" for="silenceInput">Idle detection</label>
+            <div class="silence-setting">
+              <input id="silenceInput" type="number" min="1" max="30" step="0.5" value="5" />
+              <span class="microcopy">detik hening</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card">
+        <div class="section-title">Live transcript</div>
+        <div id="transcriptStream" class="transcript-stream">
+          <div class="transcript-entry">
+            <div class="entry-header">
+              <span class="pill">Waiting for capture…</span>
+            </div>
+            <div class="entry-text">
+              Choose a note and press “Start capture” to begin transcribing.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card">
+        <div class="section-title">Highlights</div>
+        <div id="noteHighlights" class="note-editor" contenteditable="true"></div>
+      </section>
+
+      <section class="section-card">
+        <div class="section-title">Housekeeping</div>
+        <div class="export-actions">
+          <div>
+            <strong>Status:</strong> <span id="noteStatusCopy">Create or select a note to begin.</span>
+          </div>
+          <button id="archiveNoteBtn" class="secondary-btn" type="button">Archive note</button>
+        </div>
+      </section>
+    </main>
   </div>
   <script src="./renderer.js"></script>
 </body>

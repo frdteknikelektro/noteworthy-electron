@@ -1,98 +1,70 @@
-# Mic & Speaker Streamer
+# Noteworthy — Automatic Notes
 
-An example Electron application that streams microphone and system audio to OpenAI's Realtime API for real-time transcription. The app provides a simple interface to capture both microphone input and system audio output, transcribe them in real-time, and optionally record the combined audio as WAV files.
-
-This provides a starting point for building a desktop application that streams microphone and system audio to OpenAI's Realtime API for real-time transcription. See [electron-audio-loopback](https://github.com/alectrocute/electron-audio-loopback) for more information on how to capture system audio.
+Noteworthy is a beautiful Electron desktop note taker that pipes both microphone and system audio into OpenAI's Realtime transcription API. Start a live note, capture human + computer voices at once, jot manual highlights, and export everything with a couple of clicks. Notes live locally on your machine; no accounts, sync services, or surprise uploads.
 
 ![Screenshot](.github/screenshot-1.png)
 ![Screenshot](.github/screenshot-2.png)
 
-## Features
+## Highlights
 
-- **Real-time Transcription**: Stream microphone and system audio to OpenAI's Realtime API
-- **Dual Audio Capture**: Simultaneously capture microphone input and system audio output
-- **Multiple Model Support**: Choose from different OpenAI transcription models:
-  - `whisper-1`
-  - `gpt-4o-transcribe`
-  - `gpt-4o-mini-transcribe`
-- **Audio Recording**: Record combined microphone and system audio as WAV files
-- **Modern UI**: Clean, dark-themed interface with real-time status indicators
-- **Cross-platform**: Works on macOS, Windows, and Linux
+- **Dual-source capture** – stream microphone input and looped-back system audio into the same note so every voice and clip is searchable.
+- **Live transcripts** – entries are stamped with timestamps and source badges (Microphone vs System audio) so you always know where context came from.
+- **Lightweight note hub** – organise sessions, search history, add free-form highlights, archive finished notes, and clear old archives when you want a clean slate.
+- **Local-first storage** – notes are saved in the renderer's local storage; nothing leaves your device unless you export it.
+- **One-click exports** – generate Markdown summaries or print-ready PDFs directly from the desktop app.
+- **Backup recording** – optional combined WAV recorder for redundancy.
+- **Upcoming** – Offline capture via `whisper.cpp` so you can transcribe without an internet connection.
+- **Localized controls** – set a default transcription language (ships with Bahasa Indonesia), add an optional context prompt, and tune idle detection before audio is uploaded.
 
 ## Prerequisites
 
-- Node.js (v16 or higher)
-- OpenAI API key with access to Realtime API
-- Microphone and speakers/audio output device
+- macOS, Windows, or Linux
+- Node.js v16+
+- OpenAI API key with access to the Realtime API (set `OPENAI_KEY` in `.env`)
+- Microphone + permission to capture system audio (screen/audio capture prompts will appear on first run)
 
-## Installation
+## Getting Started
 
-1. Clone or download this repository
-2. Install dependencies:
-   ```bash
-   npm install
+```bash
+npm install
+npm start
+```
+
+1. Create a `.env` in the project root:
+   ```ini
+   OPENAI_KEY=sk-...
    ```
+2. Run `npm start` to launch the Electron window.
+3. Click **New Live Note**, give it a name, then press **Start capture**.
+4. Grant microphone and screen/audio capture permissions when prompted.
+5. Watch transcript entries stream in with clear labels for microphone or system audio. Add your own highlights in the editor panel as you go.
+6. Export to Markdown or PDF whenever you need to share the record.
 
-3. Create a `.env` file in the project root and add your OpenAI API key:
-   ```
-   OPENAI_KEY=your_openai_api_key_here
-   ```
+## Controls & Panels
 
-## Usage
+- **Capture controls** – start/stop streaming, choose transcription model, select your input microphone, and trigger the optional backup recorder.
+- **Transcription preferences** – switch language, provide a context prompt, and tweak the idle-detection window (1–30 s).
+- **Status pills** – see at a glance whether microphone, system audio, and recording channels are live.
+- **Live transcript** – rolling feed of entries. Draft badges show when the model is listening or processing before the final text lands in the note.
+- **Highlights** – freeform contenteditable area for action items or context.
+- **Housekeeping** – archive a note when it is done, then clear archived notes in bulk from the sidebar.
 
-1. Start the application:
-   ```bash
-   npm start
-   ```
+## Exporting
 
-2. The app window will open with controls for:
-   - **Start Streaming**: Begin capturing and transcribing audio
-   - **Stop Streaming**: Stop audio capture and transcription
-   - **Start Recording**: Begin recording combined audio as WAV file
-   - **Microphone Select**: Choose input device
-   - **Model Select**: Choose transcription model
+- **Markdown** – produces a `.md` file with timestamps, source labels, and highlights (converted to plain text).
+- **PDF** – opens a print preview; choose *Save as PDF* to download a styled snapshot of the note.
 
-3. Status indicators show connection state for:
-   - Microphone input
-   - System audio output
-   - Recording status
+## Development Notes
 
-4. Real-time transcription results appear in separate panels for microphone and system audio
+- Project entry points live in `main.js` (Electron main), `renderer.js` (UI + logic), and `preload.js`.
+- Audio loopback is provided by [`electron-audio-loopback`](https://github.com/alectrocute/electron-audio-loopback).
+- Tests are not configured yet. Add `jest` or `mocha` if you contribute automated coverage.
+- Packaging is not set up; add `electron-builder` or similar if you need installers.
 
-## Technical Details
+## Roadmap & Ideas
 
-### Architecture
+- Offline speech-to-text via `whisper.cpp` (UI already surfaces the teaser badge).
+- Multi-track export and advanced search/tagging.
+- Workspace sync once local-first workflows feel mature.
 
-- **Main Process** (`main.js`): Electron main process with audio loopback initialization
-- **Renderer Process** (`renderer.js`): Frontend logic for audio capture and API communication
-- **Preload Script** (`preload.js`): Secure bridge between main and renderer processes
-
-### Key Components
-
-- **Session Class**: Manages WebRTC connections to OpenAI Realtime API
-- **WavRecorder Class**: Handles audio recording and WAV file generation
-- **Audio Loopback**: Uses `electron-audio-loopback` for system audio capture
-
-### Dependencies
-
-- `electron`: Desktop application framework
-- `electron-audio-loopback`: System audio capture
-- `dotenv`: Environment variable management
-
-## API Requirements
-
-This application requires an OpenAI API key with access to the Realtime API. The Realtime API is currently in beta and may require special access.
-
-## Troubleshooting
-
-- **No audio detected**: Ensure microphone permissions are granted to the application
-- **System audio not captured**: On macOS, grant microphone permissions in System Preferences
-- **API errors**: Verify your OpenAI API key is valid and has Realtime API access
-
-## License
-
-This project is provided as-is for educational and development purposes. Go crazy.
-
-## Author
-
-Alec Armbruster [@alectrocute](https://github.com/alectrocute)
+Pull requests are welcome—keep them focused and follow Conventional Commit messaging (e.g. `feat(notes): add note color tags`).

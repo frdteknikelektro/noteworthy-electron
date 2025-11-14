@@ -1,8 +1,14 @@
 {
-  "name": "mic-speaker-streamer",
-  "productName": "Mic & Speaker Streamer",
-  "description": "Electron app for simultaneously streaming microphone and speaker audio",
-  "keywords": [],
+  "name": "noteworthy-note-taker",
+  "productName": "Noteworthy",
+  "description": "Beautiful automatic note taker that captures microphone + system audio and stores local notes.",
+  "keywords": [
+    "notes",
+    "transcription",
+    "electron",
+    "openai",
+    "audio"
+  ],
   "main": "./main.js",
   "version": "1.0.0",
   "author": "Alec Armbruster <alectrocute@gmail.com>",
