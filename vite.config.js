@@ -1,11 +1,21 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+const path = require('node:path');
+const { defineConfig } = require('vite');
+const react = require('@vitejs/plugin-react');
 
-export default defineConfig({
-  base: './',
-  plugins: [react()],
-  build: {
-    outDir: 'dist',
-    emptyOutDir: true
-  }
+module.exports = defineConfig(async () => {
+  const { default: tailwindcss } = await import('@tailwindcss/vite');
+
+  return {
+    base: './',
+    plugins: [react(), tailwindcss()],
+    build: {
+      outDir: 'dist',
+      emptyOutDir: true
+    },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src')
+      }
+    }
+  };
 });
