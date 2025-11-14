@@ -38,6 +38,28 @@ const THEME_MODES = ['system', 'light', 'dark'];
 const THEME_ICONS = { system: '🌓', light: '☀️', dark: '🌙' };
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' };
 
+const SECTION_CARD =
+  'rounded-2xl border border-slate-200 bg-white/80 shadow-sm shadow-slate-900/5 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-50';
+const COMPACT_CARD = 'rounded-2xl border border-slate-100 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/60';
+const INPUT_BASE =
+  'w-full appearance-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50';
+const HIGHLIGHTS_BASE =
+  'min-h-[140px] rounded-2xl border border-slate-200 bg-white/60 px-4 py-3 text-sm leading-relaxed text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-100';
+const STATUS_VARIANTS = {
+  microphone: {
+    connected: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300',
+    disconnected: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+  },
+  speaker: {
+    connected: 'bg-sky-100 text-sky-600 dark:bg-sky-900/60 dark:text-sky-200',
+    disconnected: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+  },
+  recording: {
+    connected: 'bg-rose-100 text-rose-600 dark:bg-rose-900/60 dark:text-rose-200',
+    disconnected: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+  }
+};
+
 function generateId(prefix = 'entry') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -235,7 +257,9 @@ export default function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const tone = resolveThemeTone(themeMode, systemPrefersDark);
-    document.documentElement.dataset.theme = tone;
+    const root = document.documentElement;
+    root.dataset.theme = tone;
+    root.classList.toggle('dark', tone === 'dark');
     try {
       localStorage.setItem(THEME_STORAGE_KEY, themeMode);
     } catch (error) {
@@ -804,11 +828,8 @@ export default function App() {
   const languageSelectDisabled = isCapturing;
   const silenceInputDisabled = isCapturing;
   const recordButtonLabel = isRecording ? 'Stop backup recording' : 'Start backup recording';
-  const micStatusClass = `pill microphone ${streamStatus.microphone ? 'connected' : 'disconnected'}`;
-  const speakerStatusClass = `pill speaker ${streamStatus.speaker ? 'connected' : 'disconnected'}`;
   const micStatusLabel = streamStatus.microphone ? 'Microphone live' : 'Microphone offline';
   const speakerStatusLabel = streamStatus.speaker ? 'System audio live' : 'System audio offline';
-  const recordStatusClass = `pill recording ${isRecording ? 'connected' : 'disconnected'}`;
   const recordStatusLabel = isRecording ? 'Backup recording active' : 'Backup recording idle';
   const archiveButtonText = activeNote?.archived ? 'Unarchive note' : 'Archive note';
 
@@ -816,253 +837,282 @@ export default function App() {
   const themeLabel = THEME_LABELS[themeMode];
 
   return (
-    <div className="app-shell">
-      <header className="top-bar">
-        <div className="brand-text">
-          <p className="eyebrow">Realtime capture</p>
-          <h1 className="brand-heading">Mic + Speaker Streamer</h1>
-          <p className="brand-subtitle">Clean, configurable capture tools inspired by Shadcn UI.</p>
-        </div>
-        <div className="top-actions">
-          <div className="theme-control">
-            <span className="theme-label">Theme</span>
-            <Button variant="ghost" className="ghost-btn" type="button" onClick={handleThemeToggle}>
-              <span className="theme-icon" aria-hidden="true">
-                {themeIcon}
-              </span>
-              <span className="theme-text">{themeLabel}</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="content-layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <div>
-              <p className="eyebrow">Notes</p>
-              <h2>Live library</h2>
-            </div>
-            <button className="primary-btn" type="button" onClick={createNote}>
-              New live note
-            </button>
-          </div>
-          <div className="note-controls">
-            <div className="note-search">
-              <input type="search" value={searchTerm} onChange={handleSearchChange} placeholder="Search notes" autoComplete="off" />
-            </div>
-          </div>
-          <div className="note-list">
-            {filteredNotes.length === 0 ? (
-              <div className="note-item">
-                {searchTerm ? 'No notes match that search.' : 'No notes yet — create a live note to get started.'}
-              </div>
-            ) : (
-              filteredNotes.map(note => (
-                <button
-                  key={note.id}
-                  type="button"
-                  className={`note-item${note.id === activeNote?.id ? ' active' : ''}`}
-                  onClick={() => setActiveNoteSafely(note.id)}
-                >
-                  <div className="note-item-title">{note.title || 'Untitled note'}</div>
-                  <div className="note-item-meta">
-                    {note.archived ? 'Archived' : 'Active'} • {relativeLabel(note.updatedAt || note.createdAt)}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-          <button className="link-btn" type="button" onClick={clearArchivedNotes}>
-            Clear archived notes
-          </button>
-        </aside>
-
-        <main className="content-panel">
-          <section className="card note-heading">
-            <div className="note-heading-row">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-10">
+        <header className={`${SECTION_CARD} p-6`}>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-xl space-y-2">
+              <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Realtime capture</p>
               <div>
-                <p className="eyebrow">Active note</p>
+                <h1 className="text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">Mic + Speaker Streamer</h1>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Clean, configurable capture tools inspired by Shadcn UI.</p>
+              </div>
+            </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Theme</span>
+              <Button
+                variant="ghost"
+                type="button"
+                className="gap-2 border border-slate-200 bg-white/90 px-4 py-2 text-xs font-semibold tracking-wide shadow-sm dark:border-slate-700 dark:bg-slate-900/70"
+                onClick={handleThemeToggle}
+              >
+                <span aria-hidden="true">{themeIcon}</span>
+                <span>{themeLabel}</span>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+          <aside className="space-y-4">
+            <div className={`${SECTION_CARD} p-4`}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Notes</p>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Live library</h2>
+                </div>
+                <Button variant="default" type="button" onClick={createNote}>
+                  New live note
+                </Button>
+              </div>
+              <div className="mt-4">
                 <input
-                  ref={titleInputRef}
-                  className="note-title"
-                  type="text"
-                  value={activeNote?.title || ''}
-                  onChange={event => updateNoteTitle(event.target.value)}
-                  placeholder="Untitled note"
+                  type="search"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  placeholder="Search notes"
+                  autoComplete="off"
+                  className={`${INPUT_BASE} text-sm`}
                 />
-                <p className="note-timestamp">{noteTimestamp}</p>
-              </div>
-              <div className="note-heading-actions">
-                <button className="secondary-btn" type="button" onClick={handleExportMarkdown}>
-                  Export Markdown
-                </button>
-                <button className="secondary-btn" type="button" onClick={handleExportPdf}>
-                  Export PDF
-                </button>
               </div>
             </div>
-          </section>
 
-          <section className="grid-two">
-            <article className="card capture-card">
-              <div className="section-header">
-                <span className="section-title">Capture controls</span>
-                <p className="section-subtitle">Start both microphone and system audio sessions.</p>
-              </div>
-              <div className="control-row">
-                <button className="primary-btn" type="button" onClick={startCapture} disabled={startDisabled}>
-                  Start capture
-                </button>
-                <button className="secondary-btn" type="button" onClick={stopCapture} disabled={stopDisabled}>
-                  Stop capture
-                </button>
-                <button className="secondary-btn" type="button" onClick={toggleRecording} disabled={recordDisabled}>
-                  {recordButtonLabel}
-                </button>
-              </div>
-              <div className="control-row">
-                <select value={micDeviceId} onChange={handleMicChange} disabled={micSelectDisabled}>
-                  <option value="">Default microphone</option>
-                  {micDevices.map(device => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Microphone ${device.deviceId.slice(-4)}`}
-                    </option>
-                  ))}
-                </select>
-                <select value={model} onChange={handleModelChange} disabled={modelSelectDisabled}>
-                  {MODEL_OPTIONS.map(option => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="status-row">
-                <span className={micStatusClass}>{micStatusLabel}</span>
-                <span className={speakerStatusClass}>{speakerStatusLabel}</span>
-                <span className={recordStatusClass}>{recordStatusLabel}</span>
-              </div>
-            </article>
-
-            <article className="card preferences-card">
-              <div className="section-header">
-                <span className="section-title">Preferences</span>
-                <p className="section-subtitle">Adjust transcription language, context, and VAD timing.</p>
-              </div>
-              <div className="preferences-grid">
-                <label className="preference-group">
-                  <span className="preference-label">Transcription language</span>
-                  <select
-                    className="preference-input"
-                    value={preferences.language}
-                    onChange={handleLanguageChange}
-                    disabled={languageSelectDisabled}
-                  >
-                    {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
-                      <option key={code} value={code}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="preference-group" style={{ gridColumn: 'span 2' }}>
-                  <span className="preference-label">Context prompt</span>
-                  <input
-                    className="preference-input"
-                    type="text"
-                    placeholder="e.g., team names or glossary"
-                    value={preferences.prompt}
-                    onChange={handlePromptChange}
-                  />
-                </label>
-                <label className="preference-group">
-                  <span className="preference-label">Idle detection (seconds)</span>
-                  <input
-                    className="preference-input"
-                    type="number"
-                    min="1"
-                    max="30"
-                    step="0.5"
-                    value={preferences.silenceSeconds}
-                    onChange={handleSilenceChange}
-                    disabled={silenceInputDisabled}
-                  />
-                </label>
-              </div>
-            </article>
-          </section>
-
-          <section className="card transcript-card">
-            <div className="section-header">
-              <span className="section-title">Live transcript</span>
-              <p className="section-subtitle">Entries arrive as soon as the Realtime API completes each turn.</p>
-            </div>
-            <div className="transcript-stream">
-              {transcriptEntries.length === 0 ? (
-                <div className="transcript-entry">
-                  <div className="entry-header">
-                    <span className="pill">Waiting for capture…</span>
+            <div className={`${COMPACT_CARD} p-0`}>
+              <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+                {filteredNotes.length === 0 ? (
+                  <div className="p-4 text-sm italic text-slate-500 dark:text-slate-400">
+                    {searchTerm ? 'No notes match that search.' : 'No notes yet — capture something to create live notes.'}
                   </div>
-                  <div className="entry-text">
+                ) : (
+                  filteredNotes.map((note, index) => {
+                    const isActive = note.id === activeNote?.id;
+                    return (
+                      <button
+                        key={note.id}
+                        type="button"
+                        aria-pressed={isActive}
+                        className={`w-full px-4 py-3 text-left transition ${index > 0 ? 'border-t border-slate-100 dark:border-slate-800' : ''} ${
+                          isActive
+                            ? 'border-indigo-400 bg-indigo-50 text-slate-900 dark:border-indigo-500/70 dark:bg-indigo-900/50 dark:text-slate-50'
+                            : 'border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900/60 dark:hover:border-slate-700'
+                        }`}
+                        onClick={() => setActiveNoteSafely(note.id)}
+                      >
+                        <div className="font-semibold">{note.title || 'Untitled note'}</div>
+                        <p className="mt-1 text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+                          {note.archived ? 'Archived' : 'Active'} • {relativeLabel(note.updatedAt || note.createdAt)}
+                        </p>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className={`${SECTION_CARD} p-4`}>
+              <Button variant="ghost" type="button" onClick={clearArchivedNotes} className="w-full justify-center text-sm">
+                Clear archived notes
+              </Button>
+            </div>
+          </aside>
+
+          <main className="space-y-4">
+            <section className={`${SECTION_CARD} p-6`}>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <p className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Active note</p>
+                  <input
+                    ref={titleInputRef}
+                    className={`${INPUT_BASE} text-lg font-semibold`}
+                    type="text"
+                    value={activeNote?.title || ''}
+                    onChange={event => updateNoteTitle(event.target.value)}
+                    placeholder="Untitled note"
+                  />
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{noteTimestamp}</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="outline" type="button" onClick={handleExportMarkdown}>
+                    Export Markdown
+                  </Button>
+                  <Button variant="outline" type="button" onClick={handleExportPdf}>
+                    Export PDF
+                  </Button>
+                </div>
+              </div>
+            </section>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className={`${SECTION_CARD} p-6`}>
+                <div>
+                  <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Capture controls</span>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Start microphone and system audio sessions.</p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button variant="default" type="button" onClick={startCapture} disabled={startDisabled}>
+                    Start capture
+                  </Button>
+                  <Button variant="secondary" type="button" onClick={stopCapture} disabled={stopDisabled}>
+                    Stop capture
+                  </Button>
+                  <Button variant="secondary" type="button" onClick={toggleRecording} disabled={recordDisabled}>
+                    {recordButtonLabel}
+                  </Button>
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+                    Microphone
+                    <select value={micDeviceId} onChange={handleMicChange} disabled={micSelectDisabled} className={INPUT_BASE}>
+                      <option value="">Default microphone</option>
+                      {micDevices.map(device => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Microphone ${device.deviceId.slice(-4)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+                    RT model
+                    <select value={model} onChange={handleModelChange} disabled={modelSelectDisabled} className={INPUT_BASE}>
+                      {MODEL_OPTIONS.map(option => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.microphone[streamStatus.microphone ? 'connected' : 'disconnected']}`}>
+                    {micStatusLabel}
+                  </span>
+                  <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.speaker[streamStatus.speaker ? 'connected' : 'disconnected']}`}>
+                    {speakerStatusLabel}
+                  </span>
+                  <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.recording[isRecording ? 'connected' : 'disconnected']}`}>
+                    {recordStatusLabel}
+                  </span>
+                </div>
+              </section>
+              <section className={`${SECTION_CARD} p-6`}>
+                <div className="space-y-1">
+                  <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Preferences</span>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Adjust transcription context and VAD timing.</p>
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Transcription language</span>
+                    <select value={preferences.language} onChange={handleLanguageChange} disabled={languageSelectDisabled} className={INPUT_BASE}>
+                      {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+                        <option key={code} value={code}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 sm:col-span-2">
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Context prompt</span>
+                    <input
+                      className={INPUT_BASE}
+                      type="text"
+                      placeholder="e.g., team names or glossary"
+                      value={preferences.prompt}
+                      onChange={handlePromptChange}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Idle detection (seconds)</span>
+                    <input
+                      className={INPUT_BASE}
+                      type="number"
+                      min="1"
+                      max="30"
+                      step="0.5"
+                      inputMode="decimal"
+                      value={preferences.silenceSeconds}
+                      onChange={handleSilenceChange}
+                      disabled={silenceInputDisabled}
+                    />
+                  </label>
+                </div>
+              </section>
+            </div>
+
+            <section className={`${SECTION_CARD} p-6`}>
+              <div className="space-y-1">
+                <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Live transcript</span>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Entries arrive as soon as the Realtime API completes each turn.</p>
+              </div>
+              <div className="mt-4 space-y-4 max-h-[360px] overflow-y-auto pr-1">
+                {transcriptEntries.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-100 bg-white/70 p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
                     Choose a note and press “Start capture” to begin transcribing.
                   </div>
-                </div>
-              ) : (
-                transcriptEntries.map(entry => (
-                  <div
-                    key={entry.id}
-                    className="transcript-entry"
-                    data-source={entry.source}
-                    data-draft={entry.isDraft ? 'true' : undefined}
-                  >
-                    <div className="entry-header">
-                      <span className={`pill ${entry.source === 'microphone' ? 'microphone' : 'speaker'}`}>
-                        {entry.source === 'microphone' ? 'Microphone' : 'System audio'}
-                      </span>
-                      {entry.statusLabel ? <span className="entry-status">{entry.statusLabel}</span> : null}
-                      <span className="entry-timestamp">{formatTimestamp(entry.timestamp)}</span>
+                ) : (
+                  transcriptEntries.map(entry => (
+                    <div
+                      key={entry.id}
+                      className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm transition dark:border-slate-800 dark:bg-slate-900/60"
+                      data-source={entry.source}
+                      data-draft={entry.isDraft ? 'true' : undefined}
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em]">
+                        <span
+                          className={`rounded-full px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.3em] ${
+                            STATUS_VARIANTS[entry.source]?.connected ?? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          {entry.source === 'microphone' ? 'Microphone' : 'System audio'}
+                        </span>
+                        {entry.statusLabel ? (
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{entry.statusLabel}</span>
+                        ) : null}
+                        <span className="text-xs text-slate-400 dark:text-slate-500">{formatTimestamp(entry.timestamp)}</span>
+                      </div>
+                      <p className="mt-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100">{entry.text || 'Listening…'}</p>
                     </div>
-                    <div className="entry-text">{entry.text}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="card highlight-card">
-            <div className="section-header">
-              <span className="section-title">Highlights</span>
-              <p className="section-subtitle">Capture key insights or corrections for each session.</p>
-            </div>
-            <div
-              id="noteHighlights"
-              ref={highlightsRef}
-              className="note-editor"
-              contentEditable
-              onInput={handleHighlightsInput}
-            />
-          </section>
-
-          <section className="card housekeeping-card">
-            <div className="section-header">
-              <span className="section-title">Housekeeping</span>
-            </div>
-            <div className="housekeeping-body">
-              <div className="status-copy">
-                <strong>Status:</strong> <span>{noteStatusText}</span>
+                  ))
+                )}
               </div>
-              <button
-                className="secondary-btn"
-                type="button"
-                onClick={archiveActiveNote}
-                disabled={!activeNote}
-              >
-                {archiveButtonText}
-              </button>
-            </div>
-          </section>
-        </main>
+            </section>
+
+            <section className={`${SECTION_CARD} p-6`}>
+              <div className="space-y-1">
+                <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Highlights</span>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Capture key insights or corrections for each session.</p>
+              </div>
+              <div
+                id="noteHighlights"
+                ref={highlightsRef}
+                className={HIGHLIGHTS_BASE}
+                contentEditable
+                onInput={handleHighlightsInput}
+              />
+            </section>
+
+            <section className={`${SECTION_CARD} p-6`}>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Housekeeping</span>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{noteStatusText}</p>
+                </div>
+                <Button variant="outline" type="button" onClick={archiveActiveNote} disabled={!activeNote}>
+                  {archiveButtonText}
+                </Button>
+              </div>
+            </section>
+          </main>
+        </div>
       </div>
     </div>
   );
