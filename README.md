@@ -59,7 +59,7 @@ For faster UI iteration you can run `npm run dev` to start the Vite dev server w
 -## Development Notes
 -
 - Project entry points now live in `main.js` (Electron main), `preload.js`, and the React renderer under `src/renderer`.
-- The renderer is bundled with Vite/Tailwind, renders from `src/renderer/index.jsx`, and ships the app shell + shadcn-inspired helpers stored in `src/renderer/components/ui` (build output lands in `dist/`).
+- The renderer is bundled with Vite/Tailwind, renders from `src/renderer/index.jsx`, and ships the app shell + UI helpers stored in `src/renderer/components/ui` (build output lands in `dist/`). Theme tokens follow the Tweakcn export format, so refresh the `:root`, `.dark`, and `@theme inline` blocks in `src/renderer/styles.css` with the CSS snippet you get from https://github.com/jnsahaj/tweakcn or https://tweakcn.com when you tweak the palette.
 - Run `npm run build:renderer` to produce a fresh renderer bundle before `npm start`, or use `npm run dev` for the Vite dev server while prototyping.
 - Audio loopback is provided by [`electron-audio-loopback`](https://github.com/alectrocute/electron-audio-loopback).
 - Tests are not configured yet. Add `jest` or `mocha` if you contribute automated coverage.
