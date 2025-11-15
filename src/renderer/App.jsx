@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './components/ui/button';
 import { AppSidebar } from './components/app-sidebar';
 import { SidebarInset, SidebarProvider } from './components/ui/sidebar';
+import { SiteHeader } from './components/site-header';
 import { Session, WavRecorder } from './lib/audio';
 
 const STORAGE_KEYS = {
@@ -181,34 +182,6 @@ function resolveThemeTone(mode, prefersDark) {
     return prefersDark ? 'dark' : 'light';
   }
   return mode;
-}
-
-function SiteHeader({ themeIcon, themeLabel, onThemeToggle }) {
-  return (
-    <header className={`${SECTION_CARD} p-6`}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-xl space-y-2">
-          <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Realtime capture</p>
-          <div>
-            <h1 className="text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">Mic + Speaker Streamer</h1>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Clean, configurable capture tools inspired by Shadcn UI.</p>
-          </div>
-        </div>
-        <div className="flex flex-col items-start gap-2 sm:items-end">
-          <span className="text-[0.6rem] font-semibold uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Theme</span>
-          <Button
-            variant="ghost"
-            type="button"
-            className="gap-2 border border-slate-200 bg-white/90 px-4 py-2 text-xs font-semibold tracking-wide shadow-sm dark:border-slate-700 dark:bg-slate-900/70"
-            onClick={onThemeToggle}
-          >
-            <span aria-hidden="true">{themeIcon}</span>
-            <span>{themeLabel}</span>
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
 }
 
 export default function App() {
@@ -866,10 +839,31 @@ export default function App() {
         onClearArchivedNotes={clearArchivedNotes}
       />
       <SidebarInset>
-        <SiteHeader themeIcon={themeIcon} themeLabel={themeLabel} onThemeToggle={handleThemeToggle} />
+        <SiteHeader
+          className="border-b pb-4 dark:border-slate-800/70"
+          themeIcon={themeIcon}
+          themeLabel={themeLabel}
+          onThemeToggle={handleThemeToggle}
+        />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <main className="space-y-4">
+              <section className={`${SECTION_CARD} p-6`}>
+                <div className="mt-6 max-w-xl min-w-0 space-y-2">
+                  <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
+                    Realtime capture
+                  </p>
+                  <div>
+                    <h1 className="text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
+                      Mic + Speaker Streamer
+                    </h1>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                      Clean, configurable capture tools inspired by Shadcn UI.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
               <section className={`${SECTION_CARD} p-6`}>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-1">
