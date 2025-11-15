@@ -4,6 +4,7 @@ import { AppSidebar } from './components/app-sidebar';
 import { SidebarInset, SidebarProvider } from './components/ui/sidebar';
 import { SiteHeader } from './components/site-header';
 import { Session, WavRecorder } from './lib/audio';
+import Dashboard from "@/renderer/dashboard";
 
 const STORAGE_KEYS = {
   notes: 'noteworthy.notes.v1',
@@ -826,232 +827,233 @@ export default function App() {
   const themeIcon = THEME_ICONS[themeMode];
   const themeLabel = THEME_LABELS[themeMode];
 
-  return (
-    <SidebarProvider>
-      <AppSidebar
-        variant="inset"
-        filteredNotes={filteredNotes}
-        searchTerm={searchTerm}
-        onSearchChange={handleSearchChange}
-        onCreateNote={createNote}
-        onSelectNote={setActiveNoteSafely}
-        activeNote={activeNote}
-        onClearArchivedNotes={clearArchivedNotes}
-      />
-      <SidebarInset>
-        <SiteHeader
-          className="border-b pb-4 dark:border-slate-800/70"
-          themeIcon={themeIcon}
-          themeLabel={themeLabel}
-          onThemeToggle={handleThemeToggle}
-        />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <main className="space-y-4">
-              <section className={`${SECTION_CARD} p-6`}>
-                <div className="mt-6 max-w-xl min-w-0 space-y-2">
-                  <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
-                    Realtime capture
-                  </p>
-                  <div>
-                    <h1 className="text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
-                      Mic + Speaker Streamer
-                    </h1>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                      Clean, configurable capture tools inspired by Shadcn UI.
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <section className={`${SECTION_CARD} p-6`}>
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-1">
-                    <p className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Active note</p>
-                    <input
-                      ref={titleInputRef}
-                      className={`${INPUT_BASE} text-lg font-semibold`}
-                      type="text"
-                      value={activeNote?.title || ''}
-                      onChange={event => updateNoteTitle(event.target.value)}
-                      placeholder="Untitled note"
-                    />
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{noteTimestamp}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <Button variant="outline" type="button" onClick={handleExportMarkdown}>
-                      Export Markdown
-                    </Button>
-                    <Button variant="outline" type="button" onClick={handleExportPdf}>
-                      Export PDF
-                    </Button>
-                  </div>
-                </div>
-              </section>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <section className={`${SECTION_CARD} p-6`}>
-                  <div>
-                    <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Capture controls</span>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">Start microphone and system audio sessions.</p>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Button variant="default" type="button" onClick={startCapture} disabled={startDisabled}>
-                      Start capture
-                    </Button>
-                    <Button variant="secondary" type="button" onClick={stopCapture} disabled={stopDisabled}>
-                      Stop capture
-                    </Button>
-                    <Button variant="secondary" type="button" onClick={toggleRecording} disabled={recordDisabled}>
-                      {recordButtonLabel}
-                    </Button>
-                  </div>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
-                      Microphone
-                      <select value={micDeviceId} onChange={handleMicChange} disabled={micSelectDisabled} className={INPUT_BASE}>
-                        <option value="">Default microphone</option>
-                        {micDevices.map(device => (
-                          <option key={device.deviceId} value={device.deviceId}>
-                            {device.label || `Microphone ${device.deviceId.slice(-4)}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
-                      RT model
-                      <select value={model} onChange={handleModelChange} disabled={modelSelectDisabled} className={INPUT_BASE}>
-                        {MODEL_OPTIONS.map(option => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.microphone[streamStatus.microphone ? 'connected' : 'disconnected']}`}>
-                      {micStatusLabel}
-                    </span>
-                    <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.speaker[streamStatus.speaker ? 'connected' : 'disconnected']}`}>
-                      {speakerStatusLabel}
-                    </span>
-                    <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.recording[isRecording ? 'connected' : 'disconnected']}`}>
-                      {recordStatusLabel}
-                    </span>
-                  </div>
-                </section>
-                <section className={`${SECTION_CARD} p-6`}>
-                  <div className="space-y-1">
-                    <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Preferences</span>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">Adjust transcription context and VAD timing.</p>
-                  </div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                      <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Transcription language</span>
-                      <select value={preferences.language} onChange={handleLanguageChange} disabled={languageSelectDisabled} className={INPUT_BASE}>
-                        {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
-                          <option key={code} value={code}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 sm:col-span-2">
-                      <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Context prompt</span>
-                      <input
-                        className={INPUT_BASE}
-                        type="text"
-                        placeholder="e.g., team names or glossary"
-                        value={preferences.prompt}
-                        onChange={handlePromptChange}
-                      />
-                    </label>
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                      <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Idle detection (seconds)</span>
-                      <input
-                        className={INPUT_BASE}
-                        type="number"
-                        min="1"
-                        max="30"
-                        step="0.5"
-                        inputMode="decimal"
-                        value={preferences.silenceSeconds}
-                        onChange={handleSilenceChange}
-                        disabled={silenceInputDisabled}
-                      />
-                    </label>
-                  </div>
-                </section>
-              </div>
-
-              <section className={`${SECTION_CARD} p-6`}>
-                <div className="space-y-1">
-                  <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Live transcript</span>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">Entries arrive as soon as the Realtime API completes each turn.</p>
-                </div>
-                <div className="mt-4 space-y-4 max-h-[360px] overflow-y-auto pr-1">
-                  {transcriptEntries.length === 0 ? (
-                    <div className="rounded-2xl border border-slate-100 bg-white/70 p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-                      Choose a note and press “Start capture” to begin transcribing.
-                    </div>
-                  ) : (
-                    transcriptEntries.map(entry => (
-                      <div
-                        key={entry.id}
-                        className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm transition dark:border-slate-800 dark:bg-slate-900/60"
-                        data-source={entry.source}
-                        data-draft={entry.isDraft ? 'true' : undefined}
-                      >
-                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em]">
-                          <span
-                            className={`rounded-full px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.3em] ${
-                              STATUS_VARIANTS[entry.source]?.connected ?? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                            }`}
-                          >
-                            {entry.source === 'microphone' ? 'Microphone' : 'System audio'}
-                          </span>
-                          {entry.statusLabel ? (
-                            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{entry.statusLabel}</span>
-                          ) : null}
-                          <span className="text-xs text-slate-400 dark:text-slate-500">{formatTimestamp(entry.timestamp)}</span>
-                        </div>
-                        <p className="mt-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100">{entry.text || 'Listening…'}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-
-              <section className={`${SECTION_CARD} p-6`}>
-                <div className="space-y-1">
-                  <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Highlights</span>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">Capture key insights or corrections for each session.</p>
-                </div>
-                <div
-                  id="noteHighlights"
-                  ref={highlightsRef}
-                  className={HIGHLIGHTS_BASE}
-                  contentEditable
-                  onInput={handleHighlightsInput}
-                />
-              </section>
-
-              <section className={`${SECTION_CARD} p-6`}>
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Housekeeping</span>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">{noteStatusText}</p>
-                  </div>
-                  <Button variant="outline" type="button" onClick={archiveActiveNote} disabled={!activeNote}>
-                    {archiveButtonText}
-                  </Button>
-                </div>
-              </section>
-            </main>
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  );
+  return <Dashboard />
+  // return (
+  //   <SidebarProvider>
+  //     <AppSidebar
+  //       variant="inset"
+  //       filteredNotes={filteredNotes}
+  //       searchTerm={searchTerm}
+  //       onSearchChange={handleSearchChange}
+  //       onCreateNote={createNote}
+  //       onSelectNote={setActiveNoteSafely}
+  //       activeNote={activeNote}
+  //       onClearArchivedNotes={clearArchivedNotes}
+  //     />
+  //     <SidebarInset>
+  //       <SiteHeader
+  //         className="border-b pb-4 dark:border-slate-800/70"
+  //         themeIcon={themeIcon}
+  //         themeLabel={themeLabel}
+  //         onThemeToggle={handleThemeToggle}
+  //       />
+  //       <div className="flex flex-1 flex-col">
+  //         <div className="@container/main flex flex-1 flex-col gap-2">
+  //           <main className="space-y-4">
+  //             <section className={`${SECTION_CARD} p-6`}>
+  //               <div className="mt-6 max-w-xl min-w-0 space-y-2">
+  //                 <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
+  //                   Realtime capture
+  //                 </p>
+  //                 <div>
+  //                   <h1 className="text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
+  //                     Mic + Speaker Streamer
+  //                   </h1>
+  //                   <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+  //                     Clean, configurable capture tools inspired by Shadcn UI.
+  //                   </p>
+  //                 </div>
+  //               </div>
+  //             </section>
+  //
+  //             <section className={`${SECTION_CARD} p-6`}>
+  //               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+  //                 <div className="space-y-1">
+  //                   <p className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Active note</p>
+  //                   <input
+  //                     ref={titleInputRef}
+  //                     className={`${INPUT_BASE} text-lg font-semibold`}
+  //                     type="text"
+  //                     value={activeNote?.title || ''}
+  //                     onChange={event => updateNoteTitle(event.target.value)}
+  //                     placeholder="Untitled note"
+  //                   />
+  //                   <p className="text-xs text-slate-500 dark:text-slate-400">{noteTimestamp}</p>
+  //                 </div>
+  //                 <div className="flex flex-wrap gap-3">
+  //                   <Button variant="outline" type="button" onClick={handleExportMarkdown}>
+  //                     Export Markdown
+  //                   </Button>
+  //                   <Button variant="outline" type="button" onClick={handleExportPdf}>
+  //                     Export PDF
+  //                   </Button>
+  //                 </div>
+  //               </div>
+  //             </section>
+  //
+  //             <div className="grid gap-4 lg:grid-cols-2">
+  //               <section className={`${SECTION_CARD} p-6`}>
+  //                 <div>
+  //                   <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Capture controls</span>
+  //                   <p className="text-sm text-slate-600 dark:text-slate-300">Start microphone and system audio sessions.</p>
+  //                 </div>
+  //                 <div className="mt-4 flex flex-wrap gap-3">
+  //                   <Button variant="default" type="button" onClick={startCapture} disabled={startDisabled}>
+  //                     Start capture
+  //                   </Button>
+  //                   <Button variant="secondary" type="button" onClick={stopCapture} disabled={stopDisabled}>
+  //                     Stop capture
+  //                   </Button>
+  //                   <Button variant="secondary" type="button" onClick={toggleRecording} disabled={recordDisabled}>
+  //                     {recordButtonLabel}
+  //                   </Button>
+  //                 </div>
+  //                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
+  //                   <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+  //                     Microphone
+  //                     <select value={micDeviceId} onChange={handleMicChange} disabled={micSelectDisabled} className={INPUT_BASE}>
+  //                       <option value="">Default microphone</option>
+  //                       {micDevices.map(device => (
+  //                         <option key={device.deviceId} value={device.deviceId}>
+  //                           {device.label || `Microphone ${device.deviceId.slice(-4)}`}
+  //                         </option>
+  //                       ))}
+  //                     </select>
+  //                   </label>
+  //                   <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+  //                     RT model
+  //                     <select value={model} onChange={handleModelChange} disabled={modelSelectDisabled} className={INPUT_BASE}>
+  //                       {MODEL_OPTIONS.map(option => (
+  //                         <option key={option} value={option}>
+  //                           {option}
+  //                         </option>
+  //                       ))}
+  //                     </select>
+  //                   </label>
+  //                 </div>
+  //                 <div className="mt-5 flex flex-wrap gap-3">
+  //                   <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.microphone[streamStatus.microphone ? 'connected' : 'disconnected']}`}>
+  //                     {micStatusLabel}
+  //                   </span>
+  //                   <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.speaker[streamStatus.speaker ? 'connected' : 'disconnected']}`}>
+  //                     {speakerStatusLabel}
+  //                   </span>
+  //                   <span className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${STATUS_VARIANTS.recording[isRecording ? 'connected' : 'disconnected']}`}>
+  //                     {recordStatusLabel}
+  //                   </span>
+  //                 </div>
+  //               </section>
+  //               <section className={`${SECTION_CARD} p-6`}>
+  //                 <div className="space-y-1">
+  //                   <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Preferences</span>
+  //                   <p className="text-sm text-slate-600 dark:text-slate-300">Adjust transcription context and VAD timing.</p>
+  //                 </div>
+  //                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
+  //                   <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+  //                     <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Transcription language</span>
+  //                     <select value={preferences.language} onChange={handleLanguageChange} disabled={languageSelectDisabled} className={INPUT_BASE}>
+  //                       {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+  //                         <option key={code} value={code}>
+  //                           {label}
+  //                         </option>
+  //                       ))}
+  //                     </select>
+  //                   </label>
+  //                   <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 sm:col-span-2">
+  //                     <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Context prompt</span>
+  //                     <input
+  //                       className={INPUT_BASE}
+  //                       type="text"
+  //                       placeholder="e.g., team names or glossary"
+  //                       value={preferences.prompt}
+  //                       onChange={handlePromptChange}
+  //                     />
+  //                   </label>
+  //                   <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+  //                     <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Idle detection (seconds)</span>
+  //                     <input
+  //                       className={INPUT_BASE}
+  //                       type="number"
+  //                       min="1"
+  //                       max="30"
+  //                       step="0.5"
+  //                       inputMode="decimal"
+  //                       value={preferences.silenceSeconds}
+  //                       onChange={handleSilenceChange}
+  //                       disabled={silenceInputDisabled}
+  //                     />
+  //                   </label>
+  //                 </div>
+  //               </section>
+  //             </div>
+  //
+  //             <section className={`${SECTION_CARD} p-6`}>
+  //               <div className="space-y-1">
+  //                 <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Live transcript</span>
+  //                 <p className="text-sm text-slate-600 dark:text-slate-300">Entries arrive as soon as the Realtime API completes each turn.</p>
+  //               </div>
+  //               <div className="mt-4 space-y-4 max-h-[360px] overflow-y-auto pr-1">
+  //                 {transcriptEntries.length === 0 ? (
+  //                   <div className="rounded-2xl border border-slate-100 bg-white/70 p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+  //                     Choose a note and press “Start capture” to begin transcribing.
+  //                   </div>
+  //                 ) : (
+  //                   transcriptEntries.map(entry => (
+  //                     <div
+  //                       key={entry.id}
+  //                       className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm transition dark:border-slate-800 dark:bg-slate-900/60"
+  //                       data-source={entry.source}
+  //                       data-draft={entry.isDraft ? 'true' : undefined}
+  //                     >
+  //                       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em]">
+  //                         <span
+  //                           className={`rounded-full px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.3em] ${
+  //                             STATUS_VARIANTS[entry.source]?.connected ?? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+  //                           }`}
+  //                         >
+  //                           {entry.source === 'microphone' ? 'Microphone' : 'System audio'}
+  //                         </span>
+  //                         {entry.statusLabel ? (
+  //                           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{entry.statusLabel}</span>
+  //                         ) : null}
+  //                         <span className="text-xs text-slate-400 dark:text-slate-500">{formatTimestamp(entry.timestamp)}</span>
+  //                       </div>
+  //                       <p className="mt-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100">{entry.text || 'Listening…'}</p>
+  //                     </div>
+  //                   ))
+  //                 )}
+  //               </div>
+  //             </section>
+  //
+  //             <section className={`${SECTION_CARD} p-6`}>
+  //               <div className="space-y-1">
+  //                 <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Highlights</span>
+  //                 <p className="text-sm text-slate-600 dark:text-slate-300">Capture key insights or corrections for each session.</p>
+  //               </div>
+  //               <div
+  //                 id="noteHighlights"
+  //                 ref={highlightsRef}
+  //                 className={HIGHLIGHTS_BASE}
+  //                 contentEditable
+  //                 onInput={handleHighlightsInput}
+  //               />
+  //             </section>
+  //
+  //             <section className={`${SECTION_CARD} p-6`}>
+  //               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+  //                 <div>
+  //                   <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Housekeeping</span>
+  //                   <p className="text-sm text-slate-600 dark:text-slate-300">{noteStatusText}</p>
+  //                 </div>
+  //                 <Button variant="outline" type="button" onClick={archiveActiveNote} disabled={!activeNote}>
+  //                   {archiveButtonText}
+  //                 </Button>
+  //               </div>
+  //             </section>
+  //           </main>
+  //         </div>
+  //       </div>
+  //     </SidebarInset>
+  //   </SidebarProvider>
+  // );
 }
