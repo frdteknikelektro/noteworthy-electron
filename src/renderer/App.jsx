@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './components/ui/button';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarInset,
-  SidebarProvider
-} from './components/ui/sidebar';
+import { AppSidebar } from './components/app-sidebar';
+import { SidebarInset, SidebarProvider } from './components/ui/sidebar';
 import { Session, WavRecorder } from './lib/audio';
 
 const STORAGE_KEYS = {
@@ -151,19 +147,6 @@ function formatTimestamp(iso) {
   return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function relativeLabel(iso) {
-  if (!iso) return '';
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60000);
-  if (diffMinutes < 1) return 'just now';
-  if (diffMinutes < 60) return `${diffMinutes} min ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours} hr ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-}
-
 function stripVideoTracks(stream) {
   stream.getVideoTracks().forEach(track => {
     try {
@@ -225,83 +208,6 @@ function SiteHeader({ themeIcon, themeLabel, onThemeToggle }) {
         </div>
       </div>
     </header>
-  );
-}
-
-function AppSidebar({
-  filteredNotes,
-  searchTerm,
-  onSearchChange,
-  onCreateNote,
-  onSelectNote,
-  activeNote,
-  onClearArchivedNotes,
-  variant = 'sidebar'
-}) {
-  return (
-    <Sidebar variant={variant} className="space-y-4 px-0 py-6">
-      <SidebarContent className="space-y-4 px-0">
-        <div className={`${SECTION_CARD} p-4`}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Notes</p>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Live library</h2>
-            </div>
-            <Button variant="default" type="button" onClick={onCreateNote}>
-              New live note
-            </Button>
-          </div>
-          <div className="mt-4">
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={onSearchChange}
-              placeholder="Search notes"
-              autoComplete="off"
-              className={`${INPUT_BASE} text-sm`}
-            />
-          </div>
-        </div>
-
-        <div className={`${COMPACT_CARD} p-0`}>
-          <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
-            {filteredNotes.length === 0 ? (
-              <div className="p-4 text-sm italic text-slate-500 dark:text-slate-400">
-                {searchTerm ? 'No notes match that search.' : 'No notes yet — capture something to create live notes.'}
-              </div>
-            ) : (
-              filteredNotes.map((note, index) => {
-                const isActive = note.id === activeNote?.id;
-                return (
-                  <button
-                    key={note.id}
-                    type="button"
-                    aria-pressed={isActive}
-                    className={`w-full px-4 py-3 text-left transition ${index > 0 ? 'border-t border-slate-100 dark:border-slate-800' : ''} ${
-                      isActive
-                        ? 'border-indigo-400 bg-indigo-50 text-slate-900 dark:border-indigo-500/70 dark:bg-indigo-900/50 dark:text-slate-50'
-                        : 'border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900/60 dark:hover:border-slate-700'
-                    }`}
-                    onClick={() => onSelectNote(note.id)}
-                  >
-                    <div className="font-semibold">{note.title || 'Untitled note'}</div>
-                    <p className="mt-1 text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
-                      {note.archived ? 'Archived' : 'Active'} • {relativeLabel(note.updatedAt || note.createdAt)}
-                    </p>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <div className={`${SECTION_CARD} p-4`}>
-          <Button variant="ghost" type="button" onClick={onClearArchivedNotes} className="w-full justify-center text-sm">
-            Clear archived notes
-          </Button>
-        </div>
-      </SidebarContent>
-    </Sidebar>
   );
 }
 
