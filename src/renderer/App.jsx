@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './components/ui/button';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarInset,
+  SidebarProvider
+} from './components/ui/sidebar';
 import { Session, WavRecorder } from './lib/audio';
 
 const STORAGE_KEYS = {
@@ -192,6 +198,111 @@ function resolveThemeTone(mode, prefersDark) {
     return prefersDark ? 'dark' : 'light';
   }
   return mode;
+}
+
+function SiteHeader({ themeIcon, themeLabel, onThemeToggle }) {
+  return (
+    <header className={`${SECTION_CARD} p-6`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-xl space-y-2">
+          <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Realtime capture</p>
+          <div>
+            <h1 className="text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">Mic + Speaker Streamer</h1>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Clean, configurable capture tools inspired by Shadcn UI.</p>
+          </div>
+        </div>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <span className="text-[0.6rem] font-semibold uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Theme</span>
+          <Button
+            variant="ghost"
+            type="button"
+            className="gap-2 border border-slate-200 bg-white/90 px-4 py-2 text-xs font-semibold tracking-wide shadow-sm dark:border-slate-700 dark:bg-slate-900/70"
+            onClick={onThemeToggle}
+          >
+            <span aria-hidden="true">{themeIcon}</span>
+            <span>{themeLabel}</span>
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function AppSidebar({
+  filteredNotes,
+  searchTerm,
+  onSearchChange,
+  onCreateNote,
+  onSelectNote,
+  activeNote,
+  onClearArchivedNotes,
+  variant = 'sidebar'
+}) {
+  return (
+    <Sidebar variant={variant} className="space-y-4 px-0 py-6">
+      <SidebarContent className="space-y-4 px-0">
+        <div className={`${SECTION_CARD} p-4`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Notes</p>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Live library</h2>
+            </div>
+            <Button variant="default" type="button" onClick={onCreateNote}>
+              New live note
+            </Button>
+          </div>
+          <div className="mt-4">
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={onSearchChange}
+              placeholder="Search notes"
+              autoComplete="off"
+              className={`${INPUT_BASE} text-sm`}
+            />
+          </div>
+        </div>
+
+        <div className={`${COMPACT_CARD} p-0`}>
+          <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+            {filteredNotes.length === 0 ? (
+              <div className="p-4 text-sm italic text-slate-500 dark:text-slate-400">
+                {searchTerm ? 'No notes match that search.' : 'No notes yet — capture something to create live notes.'}
+              </div>
+            ) : (
+              filteredNotes.map((note, index) => {
+                const isActive = note.id === activeNote?.id;
+                return (
+                  <button
+                    key={note.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    className={`w-full px-4 py-3 text-left transition ${index > 0 ? 'border-t border-slate-100 dark:border-slate-800' : ''} ${
+                      isActive
+                        ? 'border-indigo-400 bg-indigo-50 text-slate-900 dark:border-indigo-500/70 dark:bg-indigo-900/50 dark:text-slate-50'
+                        : 'border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900/60 dark:hover:border-slate-700'
+                    }`}
+                    onClick={() => onSelectNote(note.id)}
+                  >
+                    <div className="font-semibold">{note.title || 'Untitled note'}</div>
+                    <p className="mt-1 text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+                      {note.archived ? 'Archived' : 'Active'} • {relativeLabel(note.updatedAt || note.createdAt)}
+                    </p>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className={`${SECTION_CARD} p-4`}>
+          <Button variant="ghost" type="button" onClick={onClearArchivedNotes} className="w-full justify-center text-sm">
+            Clear archived notes
+          </Button>
+        </div>
+      </SidebarContent>
+    </Sidebar>
+  );
 }
 
 export default function App() {
@@ -837,95 +948,20 @@ export default function App() {
   const themeLabel = THEME_LABELS[themeMode];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-10">
-        <header className={`${SECTION_CARD} p-6`}>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-xl space-y-2">
-              <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Realtime capture</p>
-              <div>
-                <h1 className="text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">Mic + Speaker Streamer</h1>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Clean, configurable capture tools inspired by Shadcn UI.</p>
-              </div>
-            </div>
-            <div className="flex flex-col items-start gap-2 sm:items-end">
-              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Theme</span>
-              <Button
-                variant="ghost"
-                type="button"
-                className="gap-2 border border-slate-200 bg-white/90 px-4 py-2 text-xs font-semibold tracking-wide shadow-sm dark:border-slate-700 dark:bg-slate-900/70"
-                onClick={handleThemeToggle}
-              >
-                <span aria-hidden="true">{themeIcon}</span>
-                <span>{themeLabel}</span>
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <aside className="space-y-4">
-            <div className={`${SECTION_CARD} p-4`}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Notes</p>
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Live library</h2>
-                </div>
-                <Button variant="default" type="button" onClick={createNote}>
-                  New live note
-                </Button>
-              </div>
-              <div className="mt-4">
-                <input
-                  type="search"
-                  value={searchTerm}
-                  onChange={handleSearchChange}
-                  placeholder="Search notes"
-                  autoComplete="off"
-                  className={`${INPUT_BASE} text-sm`}
-                />
-              </div>
-            </div>
-
-            <div className={`${COMPACT_CARD} p-0`}>
-              <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
-                {filteredNotes.length === 0 ? (
-                  <div className="p-4 text-sm italic text-slate-500 dark:text-slate-400">
-                    {searchTerm ? 'No notes match that search.' : 'No notes yet — capture something to create live notes.'}
-                  </div>
-                ) : (
-                  filteredNotes.map((note, index) => {
-                    const isActive = note.id === activeNote?.id;
-                    return (
-                      <button
-                        key={note.id}
-                        type="button"
-                        aria-pressed={isActive}
-                        className={`w-full px-4 py-3 text-left transition ${index > 0 ? 'border-t border-slate-100 dark:border-slate-800' : ''} ${
-                          isActive
-                            ? 'border-indigo-400 bg-indigo-50 text-slate-900 dark:border-indigo-500/70 dark:bg-indigo-900/50 dark:text-slate-50'
-                            : 'border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900/60 dark:hover:border-slate-700'
-                        }`}
-                        onClick={() => setActiveNoteSafely(note.id)}
-                      >
-                        <div className="font-semibold">{note.title || 'Untitled note'}</div>
-                        <p className="mt-1 text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
-                          {note.archived ? 'Archived' : 'Active'} • {relativeLabel(note.updatedAt || note.createdAt)}
-                        </p>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <div className={`${SECTION_CARD} p-4`}>
-              <Button variant="ghost" type="button" onClick={clearArchivedNotes} className="w-full justify-center text-sm">
-                Clear archived notes
-              </Button>
-            </div>
-          </aside>
-
+    <SidebarProvider>
+      <AppSidebar
+        variant="inset"
+        filteredNotes={filteredNotes}
+        searchTerm={searchTerm}
+        onSearchChange={handleSearchChange}
+        onCreateNote={createNote}
+        onSelectNote={setActiveNoteSafely}
+        activeNote={activeNote}
+        onClearArchivedNotes={clearArchivedNotes}
+      />
+      <SidebarInset>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-10">
+          <SiteHeader themeIcon={themeIcon} themeLabel={themeLabel} onThemeToggle={handleThemeToggle} />
           <main className="space-y-4">
             <section className={`${SECTION_CARD} p-6`}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1113,7 +1149,7 @@ export default function App() {
             </section>
           </main>
         </div>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
