@@ -1,16 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './components/ui/button';
-import { AppSidebar } from './components/app-sidebar';
-import { SidebarInset, SidebarProvider } from './components/ui/sidebar';
 import { SiteHeader } from './components/site-header';
 import { Session, WavRecorder } from './lib/audio';
 import Dashboard from "@/renderer/dashboard";
-
-const STORAGE_KEYS = {
-  notes: 'noteworthy.notes.v1',
-  activeNote: 'noteworthy.active-note',
-  settings: 'noteworthy.settings.v1'
-};
+import { AppProvider, useApp, generateId } from './app-provider';
+import { SETTINGS_STORAGE_KEY } from './storage-keys';
 
 const LANGUAGE_LABELS = {
   id: 'Bahasa Indonesia',
@@ -64,35 +58,6 @@ const STATUS_VARIANTS = {
   }
 };
 
-function generateId(prefix = 'entry') {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function createFreshNote() {
-  const now = new Date().toISOString();
-  return {
-    id: generateId('note'),
-    title: `Live note — ${new Date().toLocaleDateString()}`,
-    createdAt: now,
-    updatedAt: now,
-    highlightsHtml: '',
-    transcript: [],
-    archived: false
-  };
-}
-
-function normalizeStoredNote(note) {
-  return {
-    ...note,
-    transcript: note.transcript || [],
-    highlightsHtml: note.highlightsHtml || '',
-    archived: Boolean(note.archived)
-  };
-}
-
 function sanitizeSilenceSeconds(value) {
   const numeric = Number(value);
   if (Number.isNaN(numeric)) {
@@ -101,24 +66,12 @@ function sanitizeSilenceSeconds(value) {
   return Math.min(30, Math.max(1, Number(numeric.toFixed(2))));
 }
 
-function initNotesState() {
-  if (typeof window === 'undefined') {
-    const note = createFreshNote();
-    return { notes: [note], activeId: note.id };
-  }
-
-  try {
-    const storedRaw = localStorage.getItem(STORAGE_KEYS.notes);
-    const parsed = storedRaw ? JSON.parse(storedRaw) : [];
-    const notes = Array.isArray(parsed) && parsed.length ? parsed.map(normalizeStoredNote) : [createFreshNote()];
-    const storedActive = localStorage.getItem(STORAGE_KEYS.activeNote);
-    const activeId = storedActive && notes.some(note => note.id === storedActive) ? storedActive : notes[0]?.id || null;
-    return { notes, activeId };
-  } catch (error) {
-    console.warn('Unable to hydrate notes:', error);
-    const note = createFreshNote();
-    return { notes: [note], activeId: note.id };
-  }
+export default function App() {
+  return (
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
+  );
 }
 
 function loadPreferencesState() {
@@ -127,7 +80,7 @@ function loadPreferencesState() {
   }
 
   try {
-    const storedRaw = localStorage.getItem(STORAGE_KEYS.settings);
+    const storedRaw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (storedRaw) {
       const parsed = JSON.parse(storedRaw);
       return {
@@ -185,15 +138,22 @@ function resolveThemeTone(mode, prefersDark) {
   return mode;
 }
 
-export default function App() {
-  const initialNotesState = useMemo(() => initNotesState(), []);
-  const [notes, setNotes] = useState(initialNotesState.notes);
-  const [activeNoteId, setActiveNoteId] = useState(initialNotesState.activeId);
+function AppContent() {
+  const {
+    notes,
+    activeNote,
+    activeNoteId,
+    setActiveNoteId,
+    updateNoteTitle,
+    updateNoteHighlights,
+    appendTranscriptEntry,
+    archiveNote,
+    deleteArchivedNotes,
+  } = useApp();
   const [preferences, setPreferences] = useState(() => loadPreferencesState());
   const [model, setModel] = useState('gpt-4o-mini-transcribe');
   const [micDeviceId, setMicDeviceId] = useState('');
   const [micDevices, setMicDevices] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
   const [drafts, setDrafts] = useState({ microphone: null, speaker: null });
   const [streamStatus, setStreamStatus] = useState({ microphone: false, speaker: false });
@@ -208,41 +168,9 @@ export default function App() {
   const systemAudioStreamRef = useRef(null);
   const wavRecorderRef = useRef(new WavRecorder());
 
-  const activeNote = useMemo(() => {
-    if (!notes.length) return null;
-    return notes.find(note => note.id === activeNoteId) || notes[0];
-  }, [activeNoteId, notes]);
-
-  useEffect(() => {
-    if (notes.length === 0) {
-      const note = createFreshNote();
-      setNotes([note]);
-      setActiveNoteId(note.id);
-      return;
-    }
-    if (activeNoteId && notes.some(note => note.id === activeNoteId)) {
-      return;
-    }
-    setActiveNoteId(notes[0]?.id || null);
-  }, [notes, activeNoteId]);
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEYS.notes, JSON.stringify(notes));
-  }, [notes]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (activeNoteId) {
-      localStorage.setItem(STORAGE_KEYS.activeNote, activeNoteId);
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.activeNote);
-    }
-  }, [activeNoteId]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(preferences));
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(preferences));
   }, [preferences]);
 
   useEffect(() => {
@@ -341,26 +269,9 @@ export default function App() {
 
   const appendFinalTranscript = useCallback(
     (source, text) => {
-      if (!activeNoteId) return;
-      const entry = {
-        id: generateId('entry'),
-        source,
-        text,
-        timestamp: new Date().toISOString()
-      };
-      setNotes(prev =>
-        prev.map(note =>
-          note.id === activeNoteId
-            ? {
-                ...note,
-                transcript: [...(note.transcript || []), entry],
-                updatedAt: new Date().toISOString()
-              }
-            : note
-        )
-      );
+      appendTranscriptEntry({ source, text });
     },
-    [activeNoteId]
+    [appendTranscriptEntry]
   );
 
   const beginDraft = useCallback((source, initialText, statusLabel) => {
@@ -561,38 +472,19 @@ export default function App() {
     }
   }, []);
 
-  const createNote = useCallback(() => {
-    const note = createFreshNote();
-    setNotes(prev => [note, ...prev]);
-    setActiveNoteId(note.id);
-    requestAnimationFrame(() => titleInputRef.current?.focus());
-  }, []);
-
-  const updateNoteTitle = useCallback(
+  const handleNoteTitleChange = useCallback(
     value => {
       if (!activeNoteId) return;
-      setNotes(prev =>
-        prev.map(note =>
-          note.id === activeNoteId
-            ? { ...note, title: value || 'Untitled note', updatedAt: new Date().toISOString() }
-            : note
-        )
-      );
+      updateNoteTitle(activeNoteId, value || 'Untitled note');
     },
-    [activeNoteId]
+    [activeNoteId, updateNoteTitle]
   );
 
   const handleHighlightsInput = useCallback(() => {
     if (!activeNoteId || !highlightsRef.current) return;
     const html = highlightsRef.current.innerHTML;
-    setNotes(prev =>
-      prev.map(note =>
-        note.id === activeNoteId
-          ? { ...note, highlightsHtml: html, updatedAt: new Date().toISOString() }
-          : note
-      )
-    );
-  }, [activeNoteId]);
+    updateNoteHighlights(activeNoteId, html);
+  }, [activeNoteId, updateNoteHighlights]);
 
   const setActiveNoteSafely = useCallback(
     noteId => {
@@ -614,14 +506,8 @@ export default function App() {
     if (isCapturing) {
       stopCapture();
     }
-    setNotes(prev =>
-      prev.map(note =>
-        note.id === activeNote.id
-          ? { ...note, archived: !note.archived, updatedAt: new Date().toISOString() }
-          : note
-      )
-    );
-  }, [activeNote, isCapturing, stopCapture]);
+    archiveNote(activeNote.id);
+  }, [activeNote, isCapturing, stopCapture, archiveNote]);
 
   const clearArchivedNotes = useCallback(() => {
     const hasArchived = notes.some(note => note.archived);
@@ -632,8 +518,8 @@ export default function App() {
     if (!window.confirm('This will permanently delete all archived notes. Continue?')) {
       return;
     }
-    setNotes(prev => prev.filter(note => !note.archived));
-  }, [notes]);
+    deleteArchivedNotes();
+  }, [notes, deleteArchivedNotes]);
 
   const handleExportMarkdown = useCallback(() => {
     if (!activeNote) {
@@ -764,10 +650,6 @@ export default function App() {
     setMicDeviceId(event.target.value);
   }, []);
 
-  const handleSearchChange = useCallback(event => {
-    setSearchTerm(event.target.value);
-  }, []);
-
   const noteStatusText = useMemo(() => {
     if (!activeNote) {
       return 'Create or select a note to begin.';
@@ -788,18 +670,6 @@ export default function App() {
     const updatedLabel = activeNote.updatedAt && activeNote.updatedAt !== activeNote.createdAt ? ` · Updated ${formatTimestamp(activeNote.updatedAt)}` : '';
     return `Created ${created}${updatedLabel}`;
   }, [activeNote]);
-
-  const filteredNotes = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    const sorted = [...notes].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
-    return sorted.filter(note => {
-      if (!term) return true;
-      const haystack = [note.title || '', note.highlightsHtml || '', ...(note.transcript || []).map(entry => entry.text || '')]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(term);
-    });
-  }, [notes, searchTerm]);
 
   const transcriptEntries = useMemo(() => {
     const finalEntries = activeNote?.transcript || [];
@@ -875,7 +745,7 @@ export default function App() {
   //                     className={`${INPUT_BASE} text-lg font-semibold`}
   //                     type="text"
   //                     value={activeNote?.title || ''}
-  //                     onChange={event => updateNoteTitle(event.target.value)}
+  //                     onChange={event => handleNoteTitleChange(event.target.value)}
   //                     placeholder="Untitled note"
   //                   />
   //                   <p className="text-xs text-slate-500 dark:text-slate-400">{noteTimestamp}</p>
