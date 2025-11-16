@@ -1,169 +1,124 @@
 "use client";
 
-import { Button } from "@/renderer/components/ui/button";
 import {
   Dialog,
   DialogHeader,
-  DialogFooter,
   DialogTitle,
   DialogDescription,
-  DialogContent,
-  DialogClose
+  DialogContent
 } from "@/renderer/components/ui/dialog";
-import { useApp } from "@/renderer/app-provider";
+import { Input } from "@/renderer/components/ui/input";
 import {
-  INPUT_BASE,
-  LANGUAGE_LABELS,
-  MODEL_OPTIONS,
-  SECTION_CARD,
-  STATUS_VARIANTS
-} from "@/renderer/settings/constants";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/renderer/components/ui/select";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel
+} from "@/renderer/components/ui/field";
+import { useApp } from "@/renderer/app-provider";
+import { LANGUAGE_LABELS, MODEL_OPTIONS } from "@/renderer/settings/constants";
+
+const PROVIDER_OPTIONS = [{ value: "openai", label: "OpenAI" }];
 
 export default function SettingsModal() {
   const {
-    activeNote,
     preferences,
     isCapturing,
-    streamStatus,
-    isRecording,
-    micDevices,
-    micDeviceId,
     model,
     settingsOpen,
     setSettingsOpen,
-    startCapture,
-    stopCapture,
-    toggleRecording,
-    handleMicChange,
     handleModelChange,
     handleLanguageChange,
-    handlePromptChange,
     handleSilenceChange
   } = useApp();
 
-  const canCapture = Boolean(activeNote && !activeNote.archived);
-  const startDisabled = isCapturing || !canCapture;
-  const stopDisabled = !isCapturing;
-  const recordDisabled = !isCapturing;
-  const micSelectDisabled = isCapturing;
-  const modelSelectDisabled = isCapturing;
-  const languageSelectDisabled = isCapturing;
-  const silenceInputDisabled = isCapturing;
-  const recordButtonLabel = isRecording ? "Stop backup recording" : "Start backup recording";
-  const micStatusLabel = streamStatus.microphone ? "Microphone live" : "Microphone offline";
-  const speakerStatusLabel = streamStatus.speaker ? "System audio live" : "System audio offline";
-  const recordStatusLabel = isRecording ? "Backup recording active" : "Backup recording idle";
+  const inputDisabled = isCapturing;
+  const handleModelSelect = value => handleModelChange({ target: { value } });
+  const handleLanguageSelect = value => handleLanguageChange({ target: { value } });
 
   return (
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
       <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Capture settings</DialogTitle>
+          <DialogTitle>Realtime capture settings</DialogTitle>
           <DialogDescription>
-            Start and stop capture sessions, select the desired realtime model, and tune transcription preferences.
+            Choose your provider, model, default transcription language, and idle detection threshold for live capture.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className={`${SECTION_CARD} p-6`}>
-            <div>
-              <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
-                Capture controls
-              </span>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                Start microphone and system audio sessions.
-              </p>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button variant="default" type="button" onClick={startCapture} disabled={startDisabled}>
-                Start capture
-              </Button>
-              <Button variant="secondary" type="button" onClick={stopCapture} disabled={stopDisabled}>
-                Stop capture
-              </Button>
-              <Button variant="secondary" type="button" onClick={toggleRecording} disabled={recordDisabled}>
-                {recordButtonLabel}
-              </Button>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
-                Microphone
-                <select value={micDeviceId} onChange={handleMicChange} disabled={micSelectDisabled} className={INPUT_BASE}>
-                  <option value="">Default microphone</option>
-                  {micDevices.map(device => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Microphone ${device.deviceId.slice(-4)}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
-                RT model
-                <select value={model} onChange={handleModelChange} disabled={modelSelectDisabled} className={INPUT_BASE}>
-                  {MODEL_OPTIONS.map(option => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <span
-                className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${
-                  STATUS_VARIANTS.microphone[streamStatus.microphone ? "connected" : "disconnected"]
-                }`}
-              >
-                {micStatusLabel}
-              </span>
-              <span
-                className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${
-                  STATUS_VARIANTS.speaker[streamStatus.speaker ? "connected" : "disconnected"]
-                }`}
-              >
-                {speakerStatusLabel}
-              </span>
-              <span
-                className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${
-                  STATUS_VARIANTS.recording[isRecording ? "connected" : "disconnected"]
-                }`}
-              >
-                {recordStatusLabel}
-              </span>
-            </div>
-          </section>
-          <section className={`${SECTION_CARD} p-6`}>
-            <div className="space-y-1">
-              <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
-                Preferences
-              </span>
-              <p className="text-sm text-slate-600 dark:text-slate-300">Adjust transcription context and VAD timing.</p>
-            </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Transcription language</span>
-                <select value={preferences.language} onChange={handleLanguageChange} disabled={languageSelectDisabled} className={INPUT_BASE}>
-                  {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
-                    <option key={code} value={code}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 sm:col-span-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Context prompt</span>
-                <input
-                  className={INPUT_BASE}
-                  type="text"
-                  placeholder="e.g., team names or glossary"
-                  value={preferences.prompt}
-                  onChange={handlePromptChange}
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Idle detection (seconds)</span>
-                <input
-                  className={INPUT_BASE}
+        <div className="space-y-6 px-0 pb-4 pt-2">
+          <div className="grid gap-6 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="provider">Provider</FieldLabel>
+              <FieldContent>
+                <Select id="provider" value={PROVIDER_OPTIONS[0].value} disabled>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROVIDER_OPTIONS.map(provider => (
+                      <SelectItem key={provider.value} value={provider.value}>
+                        {provider.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+              <FieldDescription>Only OpenAI is available right now.</FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="model">Model</FieldLabel>
+              <FieldContent>
+                <Select id="model" value={model} onValueChange={handleModelSelect} disabled={inputDisabled}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODEL_OPTIONS.map(option => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="language">Default transcription language</FieldLabel>
+              <FieldContent>
+                <Select
+                  id="language"
+                  value={preferences.language}
+                  onValueChange={handleLanguageSelect}
+                  disabled={inputDisabled}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+                      <SelectItem key={code} value={code}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="idle">Idle detection (seconds)</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="idle"
                   type="number"
                   min="1"
                   max="30"
@@ -171,18 +126,13 @@ export default function SettingsModal() {
                   inputMode="decimal"
                   value={preferences.silenceSeconds}
                   onChange={handleSilenceChange}
-                  disabled={silenceInputDisabled}
+                  disabled={inputDisabled}
                 />
-              </label>
-            </div>
-          </section>
+              </FieldContent>
+            </Field>
+          </div>
         </div>
 
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="ghost">Close</Button>
-          </DialogClose>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
