@@ -35,7 +35,8 @@ function createFreshNote() {
     updatedAt: now,
     highlightsHtml: "",
     transcript: [],
-    archived: false
+    archived: false,
+    summaries: []
   };
 }
 
@@ -46,9 +47,23 @@ function normalizeStoredNote(note) {
     transcript: note.transcript || [],
     highlightsHtml: note.highlightsHtml || "",
     archived: Boolean(note.archived),
+    summaries: note.summaries || [],
     createdAt: note.createdAt || now,
     updatedAt: note.updatedAt || note.createdAt || now
   };
+}
+
+function buildTranscriptSnippet(note, drafts) {
+  if (!note) return "";
+  const entries = [
+    ...(note.transcript || []),
+    ...Object.values(drafts).filter(Boolean)
+  ];
+  const textParts = entries
+    .map(entry => entry.text?.trim())
+    .filter(Boolean)
+    .slice(-12);
+  return textParts.join("\n");
 }
 
 function initNotesState() {
@@ -600,6 +615,86 @@ export function AppProvider({ children }) {
     setNotes(prev => prev.filter(note => !note.archived));
   }, []);
 
+
+  const generateSummary = useCallback(
+    async (noteId, promptText) => {
+      if (!noteId) {
+        throw new Error("Select or create a note before generating a summary.");
+      }
+      const note = notes.find(n => n.id === noteId);
+      if (!note) {
+        throw new Error("Unable to locate the selected note.");
+      }
+      const snippet = buildTranscriptSnippet(note, drafts);
+      if (!snippet) {
+        throw new Error("No transcript content is available yet. Capture audio first.");
+      }
+      const normalizedPrompt = promptText?.trim() || "Meeting summary";
+      const apiKey = window.electronAPI?.apiKey;
+      if (!apiKey) {
+        throw new Error("Missing OpenAI API key. Add OPENAI_KEY to your .env file.");
+      }
+
+      const payload = {
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a concise meeting summarizer. Turn the transcript into a well-organized summary that highlights decisions, action items, and follow-ups. Be factual and keep the tone professional."
+          },
+          {
+            role: "user",
+            content: `Prompt: ${normalizedPrompt}\n\nTranscript:\n${snippet}`
+          }
+        ]
+      };
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to generate summary (${response.status}): ${text || response.statusText}`);
+      }
+
+      const data = await response.json();
+      const choice = data?.choices?.[0];
+      const messageContent = choice?.message?.content;
+      const summaryText =
+        typeof messageContent === "string"
+          ? messageContent
+          : Array.isArray(messageContent)
+          ? messageContent.map(part => part?.text || "").join(" ")
+          : "";
+
+      if (!summaryText.trim()) {
+        throw new Error("The summary response was empty.");
+      }
+
+      const summary = {
+        id: generateId("summary"),
+        prompt: normalizedPrompt,
+        body: summaryText.trim(),
+        createdAt: new Date().toISOString()
+      };
+
+      updateNote(noteId, {
+        summaries: [summary, ...(note.summaries || [])]
+      });
+
+      return summary;
+    },
+    [drafts, notes, updateNote]
+  );
+
   const value = useMemo(
     () => ({
       notes,
@@ -628,6 +723,7 @@ export function AppProvider({ children }) {
       startCapture,
       stopCapture,
       toggleRecording,
+      generateSummary,
       drafts,
       streamStatus,
       isRecording,
@@ -664,6 +760,7 @@ export function AppProvider({ children }) {
       startCapture,
       stopCapture,
       toggleRecording,
+      generateSummary,
       drafts,
       streamStatus,
       isRecording,
