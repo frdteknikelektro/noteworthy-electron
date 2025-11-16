@@ -200,3 +200,17 @@
     letter-spacing: var(--tracking-normal);
   }
 }
+
+@layer components {
+  .session-title {
+    min-height: 2.5rem;
+    padding: 0;
+    white-space: pre-wrap;
+  }
+
+  .session-title:empty:before {
+    content: attr(data-placeholder);
+    color: var(--muted-foreground);
+    pointer-events: none;
+  }
+}

@@ -3,7 +3,7 @@ import { SidebarTrigger } from "@/renderer/components/ui/sidebar";
 import { Switch } from "@/renderer/components/ui/switch";
 import { useApp } from "@/renderer/app-provider";
 import { THEME_LABELS, THEME_MODES } from "@/renderer/settings/constants";
-import { Computer, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 
 export function SiteHeader() {
   const { activeNote, themeMode, systemPrefersDark, handleThemeModeChange } = useApp();
@@ -16,7 +16,7 @@ export function SiteHeader() {
   const nextThemeMode = THEME_MODES[(currentModeIndex + 1) % THEME_MODES.length];
   const nextThemeLabel = THEME_LABELS[nextThemeMode] || nextThemeMode;
   const iconKey = themeMode === "system" ? "system" : tone === "dark" ? "dark" : "light";
-  const ThemeIcons = { system: Computer, dark: Moon, light: Sun };
+  const ThemeIcons = { system: function System() { return 'System' }, dark: Moon, light: Sun };
   const CurrentThemeIcon = ThemeIcons[iconKey] || Sun;
 
   const handleSwitchChange = () => {

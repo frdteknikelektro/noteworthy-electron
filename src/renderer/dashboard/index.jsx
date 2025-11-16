@@ -13,7 +13,9 @@ export default function Dashboard() {
         <SiteHeader />
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="@container/main flex-1 min-h-0 flex-col gap-2 px-4 py-5 md:px-6 md:py-6 overflow-y-auto">
-            <NoteWorkspace />
+            <div className="container mx-auto w-full max-w-2xl">
+              <NoteWorkspace />
+            </div>
           </div>
         </div>
       </SidebarInset>

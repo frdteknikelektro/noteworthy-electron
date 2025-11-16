@@ -1,12 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useApp } from "@/renderer/app-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
-import { Input } from "@/renderer/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
 import { cn } from "@/renderer/lib/utils";
 
@@ -34,8 +32,10 @@ export function NoteWorkspace() {
     streamStatus,
     updateNoteTitle,
     generateSummary,
-    deleteNote
   } = useApp();
+
+  const titleRef = useRef(null);
+  const previousNoteIdRef = useRef(null);
 
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -50,22 +50,31 @@ export function NoteWorkspace() {
     return [...noteEntries, ...draftEntries];
   }, [activeNote, drafts]);
 
-  const noteTimestamp = useMemo(() => {
-    if (!activeNote) return "";
-    return formatTimestamp(activeNote.updatedAt || activeNote.createdAt);
-  }, [activeNote]);
-
-  const handleDeleteActiveNote = () => {
-    if (!activeNote?.id) return;
-    const name = activeNote.title?.trim() || "Untitled session";
-    const confirmed = window.confirm(`Delete "${name}" and all its transcript data? This action cannot be undone.`);
-    if (!confirmed) return;
-    deleteNote(activeNote.id);
-  };
+  const updatedTimestamp = useMemo(() => formatTimestamp(activeNote?.updatedAt), [activeNote?.updatedAt]);
 
   const storedSummaries = activeNote?.summaries || [];
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
+
+  useLayoutEffect(() => {
+    const titleElement = titleRef.current;
+    if (!titleElement) return;
+
+    const noteTitle = activeNote?.title || "";
+    const currentNoteId = activeNote?.id;
+
+    if (previousNoteIdRef.current !== currentNoteId) {
+      titleElement.textContent = noteTitle;
+      previousNoteIdRef.current = currentNoteId;
+      return;
+    }
+
+    if (document.activeElement === titleElement) return;
+
+    if (titleElement.textContent !== noteTitle) {
+      titleElement.textContent = noteTitle;
+    }
+  }, [activeNote?.id, activeNote?.title]);
 
   const handleGenerateSummary = async () => {
     if (!canGenerateSummary || isGenerating || !activeNote?.id) return;
@@ -135,27 +144,32 @@ export function NoteWorkspace() {
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2 flex-1">
-          <div className="text-xs font-semibold uppercase text-muted-foreground">Session title</div>
-          <Input
-            value={activeNote?.title || ""}
-            onChange={event => updateNoteTitle(activeNote?.id, event.target.value)}
-            placeholder="Untitled session"
-          />
-          {noteTimestamp && (
-            <p className="text-xs text-muted-foreground">Updated {noteTimestamp}</p>
+          <div
+            role="textbox"
+            aria-label="Session title"
+            tabIndex={0}
+            className="session-title text-2xl font-semibold leading-snug text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            contentEditable
+            suppressContentEditableWarning
+            spellCheck={false}
+            data-placeholder="Untitled session"
+            ref={titleRef}
+            onInput={event => {
+              if (!activeNote?.id) return;
+              const title = event.currentTarget.textContent || "";
+              updateNoteTitle(activeNote.id, title);
+            }}
+            onKeyDown={event => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.blur();
+              }
+            }}
+          ></div>
+          {updatedTimestamp && (
+            <p className="text-xs text-muted-foreground">Last Updated {updatedTimestamp}</p>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          type="button"
-          className="w-full sm:w-auto text-destructive"
-          onClick={handleDeleteActiveNote}
-          disabled={!activeNote?.id}
-        >
-          <Trash2 className="h-4 w-4 text-destructive" />
-          Delete session
-        </Button>
       </div>
 
       <div className="flex flex-1 flex-col gap-4">
