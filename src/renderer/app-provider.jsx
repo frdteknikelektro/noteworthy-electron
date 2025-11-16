@@ -1,7 +1,21 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { NOTES_STORAGE_KEY, ACTIVE_NOTE_STORAGE_KEY } from "./storage-keys";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+import { Session, WavRecorder } from "./lib/audio";
+import {
+  NOTES_STORAGE_KEY,
+  ACTIVE_NOTE_STORAGE_KEY,
+  SETTINGS_STORAGE_KEY
+} from "./storage-keys";
+import { DEFAULT_PREFERENCES, THEME_MODES, THEME_STORAGE_KEY } from "./settings/constants";
 
 const AppContext = createContext(null);
 
@@ -57,13 +71,104 @@ function initNotesState() {
   }
 }
 
+const STREAM_META = {
+  microphone: { statusId: "microphone", messageSource: "microphone", errorLabel: "microphone" },
+  system_audio: { statusId: "speaker", messageSource: "speaker", errorLabel: "system audio" }
+};
+
+function sanitizeSilenceSeconds(value) {
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    return DEFAULT_PREFERENCES.silenceSeconds;
+  }
+  return Math.min(30, Math.max(1, Number(numeric.toFixed(2))));
+}
+
+function loadPreferencesState() {
+  if (typeof window === "undefined") {
+    return { ...DEFAULT_PREFERENCES };
+  }
+
+  try {
+    const storedRaw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (storedRaw) {
+      const parsed = JSON.parse(storedRaw);
+      return {
+        ...DEFAULT_PREFERENCES,
+        ...parsed,
+        silenceSeconds: sanitizeSilenceSeconds(parsed?.silenceSeconds ?? DEFAULT_PREFERENCES.silenceSeconds)
+      };
+    }
+  } catch (error) {
+    console.warn("Failed to load preferences:", error);
+  }
+
+  return { ...DEFAULT_PREFERENCES };
+}
+
+function loadStoredThemeMode() {
+  if (typeof window === "undefined") return "system";
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (THEME_MODES.includes(stored)) {
+      return stored;
+    }
+  } catch (error) {
+    console.warn("Unable to read theme preference:", error);
+  }
+  return "system";
+}
+
+function getSystemPrefersDark() {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function resolveThemeTone(mode, prefersDark) {
+  if (mode === "system") {
+    return prefersDark ? "dark" : "light";
+  }
+  return mode;
+}
+
+function stripVideoTracks(stream) {
+  stream.getVideoTracks().forEach(track => {
+    try {
+      track.stop();
+      stream.removeTrack(track);
+    } catch (error) {
+      console.warn("Unable to remove video track:", error);
+    }
+  });
+}
+
 export function AppProvider({ children }) {
   const initial = useMemo(() => initNotesState(), []);
   const [notes, setNotes] = useState(initial.notes);
   const [activeNoteId, setActiveNoteId] = useState(initial.activeId);
   const [searchTerm, setSearchTerm] = useState("");
+  const [preferences, setPreferences] = useState(() => loadPreferencesState());
+  const [model, setModel] = useState("gpt-4o-mini-transcribe");
+  const [micDeviceId, setMicDeviceId] = useState("");
+  const [micDevices, setMicDevices] = useState([]);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [drafts, setDrafts] = useState({ microphone: null, speaker: null });
+  const [streamStatus, setStreamStatus] = useState({ microphone: false, speaker: false });
+  const [isRecording, setIsRecording] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState(() => loadStoredThemeMode());
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark());
 
-  const activeNote = useMemo(() => notes.find(note => note.id === activeNoteId) || notes[0] || null, [activeNoteId, notes]);
+  const microphoneSessionRef = useRef(null);
+  const systemAudioSessionRef = useRef(null);
+  const microphoneStreamRef = useRef(null);
+  const systemAudioStreamRef = useRef(null);
+  const wavRecorderRef = useRef(new WavRecorder());
+
+  const activeNote = useMemo(
+    () => notes.find(note => note.id === activeNoteId) || notes[0] || null,
+    [activeNoteId, notes]
+  );
 
   useEffect(() => {
     if (notes.length === 0) {
@@ -91,6 +196,351 @@ export function AppProvider({ children }) {
       localStorage.removeItem(ACTIVE_NOTE_STORAGE_KEY);
     }
   }, [activeNoteId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(preferences));
+  }, [preferences]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tone = resolveThemeTone(themeMode, systemPrefersDark);
+    const root = document.documentElement;
+    root.dataset.theme = tone;
+    root.classList.toggle("dark", tone === "dark");
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    } catch (error) {
+      console.warn("Unable to persist theme preference:", error);
+    }
+  }, [themeMode, systemPrefersDark]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const handleChange = event => {
+      setSystemPrefersDark(event.matches);
+    };
+
+    if ("addEventListener" in mediaQuery) {
+      mediaQuery.addEventListener("change", handleChange);
+    } else if ("addListener" in mediaQuery) {
+      mediaQuery.addListener(handleChange);
+    }
+
+    return () => {
+      if ("removeEventListener" in mediaQuery) {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else if ("removeListener" in mediaQuery) {
+        mediaQuery.removeListener(handleChange);
+      }
+    };
+  }, []);
+
+  const refreshMicrophones = useCallback(() => {
+    if (!navigator?.mediaDevices?.enumerateDevices) return;
+    navigator.mediaDevices
+      .enumerateDevices()
+      .then(devices => {
+        const audioInputs = devices.filter(device => device.kind === "audioinput");
+        setMicDevices(audioInputs);
+      })
+      .catch(error => console.warn("Unable to enumerate microphones", error));
+  }, []);
+
+  useEffect(() => {
+    refreshMicrophones();
+    if (!navigator?.mediaDevices?.addEventListener) return;
+    const handler = () => refreshMicrophones();
+    navigator.mediaDevices.addEventListener("devicechange", handler);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", handler);
+  }, [refreshMicrophones]);
+
+  const appendTranscriptEntry = useCallback(
+    ({ source, text }) => {
+      if (!activeNoteId) return;
+      const timestamp = new Date().toISOString();
+      const entry = { id: generateId("entry"), source, text, timestamp };
+      setNotes(prev =>
+        prev.map(note =>
+          note.id === activeNoteId
+            ? { ...note, transcript: [...(note.transcript || []), entry], updatedAt: timestamp }
+            : note
+        )
+      );
+    },
+    [activeNoteId]
+  );
+
+  const appendFinalTranscript = useCallback(
+    (source, text) => {
+      appendTranscriptEntry({ source, text });
+    },
+    [appendTranscriptEntry]
+  );
+
+  const beginDraft = useCallback((source, initialText, statusLabel) => {
+    setDrafts(prev => ({
+      ...prev,
+      [source]: {
+        id: generateId("draft"),
+        source,
+        text: initialText,
+        timestamp: new Date().toISOString(),
+        statusLabel
+      }
+    }));
+  }, []);
+
+  const updateDraft = useCallback((source, text, statusLabel) => {
+    setDrafts(prev => {
+      const current = prev[source];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [source]: {
+          ...current,
+          text,
+          timestamp: new Date().toISOString(),
+          statusLabel
+        }
+      };
+    });
+  }, []);
+
+  const finalizeDraft = useCallback(
+    (source, text) => {
+      setDrafts(prev => ({ ...prev, [source]: null }));
+      appendFinalTranscript(source, text);
+    },
+    [appendFinalTranscript]
+  );
+
+  const handleStreamMessage = useCallback(
+    (source, message) => {
+      switch (message.type) {
+        case "transcription_session.created":
+          console.log(`${source} session created:`, message.session?.id);
+          break;
+        case "input_audio_buffer.speech_started":
+          beginDraft(source, "Listening…", "Listening…");
+          break;
+        case "input_audio_buffer.speech_stopped":
+          updateDraft(source, "Processing…", "Processing…");
+          break;
+        case "conversation.item.input_audio_transcription.completed":
+          finalizeDraft(source, message.transcript || "");
+          break;
+        default:
+          break;
+      }
+    },
+    [beginDraft, finalizeDraft, updateDraft]
+  );
+
+  const updateStatus = useCallback((statusId, connected) => {
+    setStreamStatus(prev => ({ ...prev, [statusId]: connected }));
+  }, []);
+
+  const stopCapture = useCallback(() => {
+    microphoneSessionRef.current?.stop();
+    systemAudioSessionRef.current?.stop();
+    microphoneSessionRef.current = null;
+    systemAudioSessionRef.current = null;
+
+    microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+    systemAudioStreamRef.current?.getTracks().forEach(track => track.stop());
+    microphoneStreamRef.current = null;
+    systemAudioStreamRef.current = null;
+
+    setStreamStatus({ microphone: false, speaker: false });
+    setDrafts({ microphone: null, speaker: null });
+
+    if (wavRecorderRef.current?.isRecording) {
+      wavRecorderRef.current.stopRecording();
+      setIsRecording(false);
+    }
+
+    setIsCapturing(false);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      if (isCapturing) {
+        stopCapture();
+      }
+    };
+
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isCapturing, stopCapture]);
+
+  const handleCaptureError = useCallback(
+    (error, label) => {
+      console.error(`${label} session error:`, error);
+      alert(`Error (${label}): ${error.message}`);
+      stopCapture();
+    },
+    [stopCapture]
+  );
+
+  const createRealtimeSession = useCallback(
+    type => {
+      const meta = STREAM_META[type];
+      const session = new Session(window.electronAPI?.apiKey, type);
+      session.onconnectionstatechange = stateValue => updateStatus(meta.statusId, stateValue === "connected");
+      session.onmessage = message => handleStreamMessage(meta.messageSource, message);
+      session.onerror = error => handleCaptureError(error, meta.errorLabel);
+      return session;
+    },
+    [handleCaptureError, handleStreamMessage, updateStatus]
+  );
+
+  const setupRealtimeSessions = useCallback(
+    async sessionConfig => {
+      microphoneSessionRef.current = createRealtimeSession("microphone");
+      systemAudioSessionRef.current = createRealtimeSession("system_audio");
+      await Promise.all([
+        microphoneSessionRef.current.startTranscription(microphoneStreamRef.current, sessionConfig),
+        systemAudioSessionRef.current.startTranscription(systemAudioStreamRef.current, sessionConfig)
+      ]);
+    },
+    [createRealtimeSession]
+  );
+
+  const captureMediaStreams = useCallback(
+    async () => {
+      const microphone = await navigator.mediaDevices.getUserMedia({
+        audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
+        video: false
+      });
+
+      if (window.electronAPI?.enableLoopbackAudio) {
+        await window.electronAPI.enableLoopbackAudio();
+      }
+
+      let displayStream;
+      try {
+        displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+      } finally {
+        if (window.electronAPI?.disableLoopbackAudio) {
+          await window.electronAPI.disableLoopbackAudio();
+        }
+      }
+
+      stripVideoTracks(displayStream);
+      return { microphone, systemAudio: displayStream };
+    },
+    [micDeviceId]
+  );
+
+  const buildSessionConfig = useCallback(() => {
+    const transcription = {
+      model,
+      prompt: preferences.prompt?.trim(),
+      language: preferences.language
+    };
+    const config = {
+      input_audio_transcription: {
+        model: transcription.model
+      },
+      turn_detection: {
+        type: "server_vad",
+        silence_duration_ms: Math.round(preferences.silenceSeconds * 1000)
+      }
+    };
+    if (transcription.prompt) {
+      config.input_audio_transcription.prompt = transcription.prompt;
+    }
+    if (transcription.language) {
+      config.input_audio_transcription.language = transcription.language;
+    }
+    return config;
+  }, [model, preferences]);
+
+  const ensureCapturePreconditions = useCallback(() => {
+    if (!activeNote) {
+      alert("Create or select a note before starting capture.");
+      return false;
+    }
+    if (activeNote.archived) {
+      alert("Unarchive the note before resuming capture.");
+      return false;
+    }
+    if (!window.electronAPI?.apiKey) {
+      alert("Missing OpenAI API key. Add it to your .env file as OPENAI_KEY.");
+      return false;
+    }
+    return true;
+  }, [activeNote]);
+
+  const startCapture = useCallback(
+    async () => {
+      if (!ensureCapturePreconditions()) return;
+      setIsCapturing(true);
+      try {
+        const streams = await captureMediaStreams();
+        microphoneStreamRef.current = streams.microphone;
+        systemAudioStreamRef.current = streams.systemAudio;
+        const sessionConfig = buildSessionConfig();
+        await setupRealtimeSessions(sessionConfig);
+        updateStatus("microphone", true);
+        updateStatus("speaker", true);
+      } catch (error) {
+        console.error("Error starting capture:", error);
+        alert(`Error starting capture: ${error.message}`);
+        stopCapture();
+      }
+    },
+    [buildSessionConfig, captureMediaStreams, ensureCapturePreconditions, setupRealtimeSessions, stopCapture, updateStatus]
+  );
+
+  const toggleRecording = useCallback(async () => {
+    try {
+      if (!wavRecorderRef.current.isRecording) {
+        await wavRecorderRef.current.startRecording(microphoneStreamRef.current, systemAudioStreamRef.current);
+        setIsRecording(true);
+      } else {
+        wavRecorderRef.current.stopRecording();
+        setIsRecording(false);
+      }
+    } catch (error) {
+      console.error("Error controlling recording:", error);
+      alert(error.message);
+    }
+  }, []);
+
+  const handleLanguageChange = useCallback(event => {
+    const next = event.target.value || DEFAULT_PREFERENCES.language;
+    setPreferences(prev => ({ ...prev, language: next }));
+  }, []);
+
+  const handlePromptChange = useCallback(event => {
+    setPreferences(prev => ({ ...prev, prompt: event.target.value }));
+  }, []);
+
+  const handleSilenceChange = useCallback(event => {
+    const sanitized = sanitizeSilenceSeconds(event.target.value);
+    setPreferences(prev => ({ ...prev, silenceSeconds: sanitized }));
+  }, []);
+
+  const handleModelChange = useCallback(event => {
+    setModel(event.target.value);
+  }, []);
+
+  const handleMicChange = useCallback(event => {
+    setMicDeviceId(event.target.value);
+  }, []);
+
+  const handleThemeToggle = useCallback(() => {
+    const currentIndex = THEME_MODES.indexOf(themeMode);
+    const nextIndex = (currentIndex + 1) % THEME_MODES.length;
+    setThemeMode(THEME_MODES[nextIndex]);
+  }, [themeMode]);
+
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   const filteredNotes = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -137,22 +587,6 @@ export function AppProvider({ children }) {
     [updateNote]
   );
 
-  const appendTranscriptEntry = useCallback(
-    ({ source, text }) => {
-      if (!activeNoteId) return;
-      const timestamp = new Date().toISOString();
-      const entry = { id: generateId("entry"), source, text, timestamp };
-      setNotes(prev =>
-        prev.map(note =>
-          note.id === activeNoteId
-            ? { ...note, transcript: [...(note.transcript || []), entry], updatedAt: timestamp }
-            : note
-        )
-      );
-    },
-    [activeNoteId]
-  );
-
   const archiveNote = useCallback(noteId => {
     if (!noteId) return;
     const timestamp = new Date().toISOString();
@@ -181,7 +615,30 @@ export function AppProvider({ children }) {
       updateNoteHighlights,
       appendTranscriptEntry,
       archiveNote,
-      deleteArchivedNotes
+      deleteArchivedNotes,
+      preferences,
+      handleLanguageChange,
+      handlePromptChange,
+      handleSilenceChange,
+      model,
+      handleModelChange,
+      micDeviceId,
+      handleMicChange,
+      micDevices,
+      isCapturing,
+      startCapture,
+      stopCapture,
+      toggleRecording,
+      drafts,
+      streamStatus,
+      isRecording,
+      settingsOpen,
+      openSettings,
+      closeSettings,
+      setSettingsOpen,
+      themeMode,
+      handleThemeToggle,
+      systemPrefersDark
     }),
     [
       notes,
@@ -189,14 +646,35 @@ export function AppProvider({ children }) {
       searchTerm,
       activeNote,
       activeNoteId,
-      setActiveNoteId,
-      setSearchTerm,
       createNote,
       updateNoteTitle,
       updateNoteHighlights,
       appendTranscriptEntry,
       archiveNote,
-      deleteArchivedNotes
+      deleteArchivedNotes,
+      preferences,
+      handleLanguageChange,
+      handlePromptChange,
+      handleSilenceChange,
+      model,
+      handleModelChange,
+      micDeviceId,
+      handleMicChange,
+      micDevices,
+      isCapturing,
+      startCapture,
+      stopCapture,
+      toggleRecording,
+      drafts,
+      streamStatus,
+      isRecording,
+      settingsOpen,
+      openSettings,
+      closeSettings,
+      setSettingsOpen,
+      themeMode,
+      handleThemeToggle,
+      systemPrefersDark
     ]
   );
 
