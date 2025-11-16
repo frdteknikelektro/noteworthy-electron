@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './components/ui/button';
-import { SiteHeader } from './components/site-header';
+import {
+  Dialog,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  DialogContent,
+  DialogClose
+} from './components/ui/dialog';
 import { Session, WavRecorder } from './lib/audio';
 import Dashboard from "@/renderer/dashboard";
 import { AppProvider, useApp, generateId } from './app-provider';
@@ -64,6 +72,169 @@ function sanitizeSilenceSeconds(value) {
     return DEFAULT_PREFERENCES.silenceSeconds;
   }
   return Math.min(30, Math.max(1, Number(numeric.toFixed(2))));
+}
+
+function SettingsModal({
+  open,
+  onOpenChange,
+  startCapture,
+  stopCapture,
+  toggleRecording,
+  startDisabled,
+  stopDisabled,
+  recordDisabled,
+  recordButtonLabel,
+  micDevices,
+  micDeviceId,
+  handleMicChange,
+  micSelectDisabled,
+  model,
+  handleModelChange,
+  modelSelectDisabled,
+  preferences,
+  handleLanguageChange,
+  handlePromptChange,
+  handleSilenceChange,
+  languageSelectDisabled,
+  silenceInputDisabled,
+  streamStatus,
+  isRecording,
+  micStatusLabel,
+  speakerStatusLabel,
+  recordStatusLabel
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Capture settings</DialogTitle>
+          <DialogDescription>
+            Start and stop capture sessions, select the desired realtime model, and tune transcription preferences.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className={`${SECTION_CARD} p-6`}>
+            <div>
+              <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
+                Capture controls
+              </span>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Start microphone and system audio sessions.
+              </p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button variant="default" type="button" onClick={startCapture} disabled={startDisabled}>
+                Start capture
+              </Button>
+              <Button variant="secondary" type="button" onClick={stopCapture} disabled={stopDisabled}>
+                Stop capture
+              </Button>
+              <Button variant="secondary" type="button" onClick={toggleRecording} disabled={recordDisabled}>
+                {recordButtonLabel}
+              </Button>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+                Microphone
+                <select value={micDeviceId} onChange={handleMicChange} disabled={micSelectDisabled} className={INPUT_BASE}>
+                  <option value="">Default microphone</option>
+                  {micDevices.map(device => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || `Microphone ${device.deviceId.slice(-4)}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
+                RT model
+                <select value={model} onChange={handleModelChange} disabled={modelSelectDisabled} className={INPUT_BASE}>
+                  {MODEL_OPTIONS.map(option => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <span
+                className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${
+                  STATUS_VARIANTS.microphone[streamStatus.microphone ? 'connected' : 'disconnected']
+                }`}
+              >
+                {micStatusLabel}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${
+                  STATUS_VARIANTS.speaker[streamStatus.speaker ? 'connected' : 'disconnected']
+                }`}
+              >
+                {speakerStatusLabel}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${
+                  STATUS_VARIANTS.recording[isRecording ? 'connected' : 'disconnected']
+                }`}
+              >
+                {recordStatusLabel}
+              </span>
+            </div>
+          </section>
+          <section className={`${SECTION_CARD} p-6`}>
+            <div className="space-y-1">
+              <span className="text-[0.6rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
+                Preferences
+              </span>
+              <p className="text-sm text-slate-600 dark:text-slate-300">Adjust transcription context and VAD timing.</p>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Transcription language</span>
+                <select value={preferences.language} onChange={handleLanguageChange} disabled={languageSelectDisabled} className={INPUT_BASE}>
+                  {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+                    <option key={code} value={code}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 sm:col-span-2">
+                <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Context prompt</span>
+                <input
+                  className={INPUT_BASE}
+                  type="text"
+                  placeholder="e.g., team names or glossary"
+                  value={preferences.prompt}
+                  onChange={handlePromptChange}
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <span className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Idle detection (seconds)</span>
+                <input
+                  className={INPUT_BASE}
+                  type="number"
+                  min="1"
+                  max="30"
+                  step="0.5"
+                  inputMode="decimal"
+                  value={preferences.silenceSeconds}
+                  onChange={handleSilenceChange}
+                  disabled={silenceInputDisabled}
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="ghost">Close</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function App() {
@@ -160,6 +331,7 @@ function AppContent() {
   const [isRecording, setIsRecording] = useState(false);
   const [themeMode, setThemeMode] = useState(() => loadStoredThemeMode());
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark());
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const titleInputRef = useRef(null);
   const highlightsRef = useRef(null);
   const microphoneSessionRef = useRef(null);
@@ -628,6 +800,10 @@ function AppContent() {
     setThemeMode(THEME_MODES[nextIndex]);
   }, [themeMode]);
 
+  const handleOpenSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+
   const handleLanguageChange = useCallback(event => {
     const next = event.target.value || DEFAULT_PREFERENCES.language;
     setPreferences(prev => ({ ...prev, language: next }));
@@ -697,7 +873,45 @@ function AppContent() {
   const themeIcon = THEME_ICONS[themeMode];
   const themeLabel = THEME_LABELS[themeMode];
 
-  return <Dashboard />
+  return (
+    <>
+      <Dashboard
+        themeIcon={themeIcon}
+        themeLabel={themeLabel}
+        onThemeToggle={handleThemeToggle}
+        onOpenSettings={handleOpenSettings}
+      />
+      <SettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        startCapture={startCapture}
+        stopCapture={stopCapture}
+        toggleRecording={toggleRecording}
+        startDisabled={startDisabled}
+        stopDisabled={stopDisabled}
+        recordDisabled={recordDisabled}
+        recordButtonLabel={recordButtonLabel}
+        micDevices={micDevices}
+        micDeviceId={micDeviceId}
+        handleMicChange={handleMicChange}
+        micSelectDisabled={micSelectDisabled}
+        model={model}
+        handleModelChange={handleModelChange}
+        modelSelectDisabled={modelSelectDisabled}
+        preferences={preferences}
+        handleLanguageChange={handleLanguageChange}
+        handlePromptChange={handlePromptChange}
+        handleSilenceChange={handleSilenceChange}
+        languageSelectDisabled={languageSelectDisabled}
+        silenceInputDisabled={silenceInputDisabled}
+        streamStatus={streamStatus}
+        isRecording={isRecording}
+        micStatusLabel={micStatusLabel}
+        speakerStatusLabel={speakerStatusLabel}
+        recordStatusLabel={recordStatusLabel}
+      />
+    </>
+  )
   // return (
   //   <SidebarProvider>
   //     <AppSidebar
