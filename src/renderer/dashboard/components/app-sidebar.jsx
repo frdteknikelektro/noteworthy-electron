@@ -14,8 +14,8 @@ import {
 } from "@/renderer/components/ui/sidebar";
 import { useApp } from "@/renderer/app-provider";
 
-export function AppSidebar({ variant = "sidebar", className, onOpenSettings = () => {}, ...props }) {
-  const { filteredNotes, activeNoteId, setActiveNoteId, createNote } = useApp();
+export function AppSidebar({ variant = "sidebar", className, ...props }) {
+  const { filteredNotes, activeNoteId, setActiveNoteId, createNote, openSettings } = useApp();
 
   const hasNotes = filteredNotes.length > 0;
 
@@ -26,7 +26,7 @@ export function AppSidebar({ variant = "sidebar", className, onOpenSettings = ()
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
             <span className="text-lg font-semibold tracking-tight">N</span>
           </div>
-          <p className="text-lg font-semibold text-slate-900 dark:text-slate-50">Noteworthy</p>
+          <p className="text-lg font-semibold text-foreground">Noteworthy</p>
         </div>
         <Button
           variant="outline"
@@ -39,7 +39,7 @@ export function AppSidebar({ variant = "sidebar", className, onOpenSettings = ()
         </Button>
       </SidebarHeader>
       <SidebarContent className="flex-1 space-y-3 px-1 py-2">
-        <p className="px-3 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">
+        <p className="px-3 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-muted-foreground">
           History
         </p>
         {hasNotes ? (
@@ -58,7 +58,7 @@ export function AppSidebar({ variant = "sidebar", className, onOpenSettings = ()
             ))}
           </SidebarMenu>
         ) : (
-          <div className="px-3 text-sm text-slate-500 dark:text-slate-400">No notes yet.</div>
+          <div className="px-3 text-sm text-muted-foreground">No notes yet.</div>
         )}
       </SidebarContent>
       <SidebarFooter className="mt-auto px-3 pb-3 pt-2">
@@ -66,7 +66,7 @@ export function AppSidebar({ variant = "sidebar", className, onOpenSettings = ()
           variant="ghost"
           size="sm"
           className="w-full uppercase tracking-[0.25em]"
-          onClick={onOpenSettings}
+          onClick={openSettings}
         >
           Settings
         </Button>

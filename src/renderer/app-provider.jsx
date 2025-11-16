@@ -533,11 +533,10 @@ export function AppProvider({ children }) {
     setMicDeviceId(event.target.value);
   }, []);
 
-  const handleThemeToggle = useCallback(() => {
-    const currentIndex = THEME_MODES.indexOf(themeMode);
-    const nextIndex = (currentIndex + 1) % THEME_MODES.length;
-    setThemeMode(THEME_MODES[nextIndex]);
-  }, [themeMode]);
+  const handleThemeModeChange = useCallback(mode => {
+    if (!THEME_MODES.includes(mode)) return;
+    setThemeMode(mode);
+  }, []);
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -637,7 +636,7 @@ export function AppProvider({ children }) {
       closeSettings,
       setSettingsOpen,
       themeMode,
-      handleThemeToggle,
+      handleThemeModeChange,
       systemPrefersDark
     }),
     [
@@ -673,7 +672,7 @@ export function AppProvider({ children }) {
       closeSettings,
       setSettingsOpen,
       themeMode,
-      handleThemeToggle,
+      handleThemeModeChange,
       systemPrefersDark
     ]
   );
