@@ -3,7 +3,8 @@ const { initMain: initAudioLoopback } = require('electron-audio-loopback');
 const path = require('node:path')
 const dotenv = require('dotenv');
 
-dotenv.config();
+const envPath = path.join(app.getAppPath ? app.getAppPath() : __dirname, '.env');
+dotenv.config({ path: envPath });
 
 initAudioLoopback();
 

@@ -56,14 +56,19 @@ For faster UI iteration you can run `npm run dev` to start the Vite dev server w
 - **Markdown** – produces a `.md` file with timestamps, source labels, and highlights (converted to plain text).
 - **PDF** – opens a print preview; choose *Save as PDF* to download a styled snapshot of the note.
 
--## Development Notes
--
+## Development Notes
+
 - Project entry points now live in `main.js` (Electron main), `preload.js`, and the React renderer under `src/renderer`.
 - The renderer is bundled with Vite/Tailwind, renders from `src/renderer/index.jsx`, and ships the app shell + UI helpers stored in `src/renderer/components/ui` (build output lands in `dist/`). Theme tokens follow the Tweakcn export format, so refresh the `:root`, `.dark`, and `@theme inline` blocks in `src/renderer/styles.css` with the CSS snippet you get from https://github.com/jnsahaj/tweakcn or https://tweakcn.com when you tweak the palette.
 - Run `npm run build:renderer` to produce a fresh renderer bundle before `npm start`, or use `npm run dev` for the Vite dev server while prototyping.
 - Audio loopback is provided by [`electron-audio-loopback`](https://github.com/alectrocute/electron-audio-loopback).
 - Tests are not configured yet. Add `jest` or `mocha` if you contribute automated coverage.
-- Packaging is not set up; add `electron-builder` or similar if you need installers.
+
+## Packaging
+
+- Install dependencies (`npm install`) and make sure a valid `OPENAI_KEY` lives in `.env`; the packaging step picks up whatever credentials exist locally.
+- Run `npm run dist` to rebuild the renderer and invoke `electron-builder --mac`, which emits the notarized `dmg` and zipped app under `release/`.
+- Share the resulting `release/Noteworthy-<version>.dmg`/`.zip` with macOS users or add more targets if you need installers for other platforms.
 
 ## Roadmap & Ideas
 

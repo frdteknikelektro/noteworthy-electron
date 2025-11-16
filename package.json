@@ -15,7 +15,8 @@
   "scripts": {
     "dev": "vite",
     "build:renderer": "vite build",
-    "start": "npm run build:renderer && electron ."
+    "start": "npm run build:renderer && electron .",
+    "dist": "npm run build:renderer && electron-builder --mac"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -39,8 +40,31 @@
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.15",
     "electron": "35.0.0",
+    "electron-builder": "^24.0.0",
     "postcss": "^8.4.27",
     "tailwindcss": "^4.1.17",
     "vite": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.alectrocute.noteworthy",
+    "productName": "Noteworthy",
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json",
+      ".env",
+      "node_modules/**/*"
+    ]
   }
 }
