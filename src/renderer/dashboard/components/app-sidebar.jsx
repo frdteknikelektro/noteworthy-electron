@@ -1,147 +1,66 @@
 "use client";
 
-import { cn } from "@/renderer/lib/utils";
+import { Plus } from "lucide-react";
+
 import { Button } from "@/renderer/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuButton,
 } from "@/renderer/components/ui/sidebar";
-import { useApp } from "../../app-provider";
-
-const SEARCH_INPUT_CLASSES =
-  "w-full appearance-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50";
-
-const CARD_CLASSES =
-  "rounded-2xl border border-slate-100 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/60";
-
-const BADGE_CLASSES = {
-  active: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200",
-  archived: "bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200",
-};
-
-function relativeLabel(iso) {
-  if (!iso) return "";
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60000);
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes} min ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours} hr ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
-}
+import { useApp } from "@/renderer/app-provider";
 
 export function AppSidebar({ variant = "sidebar", className, ...props }) {
-  const {
-    notes,
-    filteredNotes,
-    searchTerm,
-    setSearchTerm,
-    activeNote,
-    setActiveNoteId,
-    createNote,
-  } = useApp();
+  const { filteredNotes, activeNoteId, setActiveNoteId, createNote } = useApp();
+
+  const hasNotes = filteredNotes.length > 0;
 
   return (
     <Sidebar collapsible="offcanvas" variant={variant} className={className} {...props}>
-      <SidebarHeader className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[0.65rem] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Notes</p>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Live library</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Showing {filteredNotes.length} of {notes.length} documents
-            </p>
+      <SidebarHeader className="space-y-4 border-b border-border px-2 pb-4 pt-3">
+        <div className="flex flex-col items-center gap-2">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
+            <span className="text-lg font-semibold tracking-tight">N</span>
           </div>
-          <Button variant="default" type="button" onClick={createNote}>
-            New live note
-          </Button>
+          <p className="text-lg font-semibold text-slate-900 dark:text-slate-50">Noteworthy</p>
         </div>
-        <div>
-          <input
-            type="search"
-            placeholder="Search notes"
-            autoComplete="off"
-            value={searchTerm}
-            onChange={event => setSearchTerm(event.target.value)}
-            className={SEARCH_INPUT_CLASSES}
-          />
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full uppercase tracking-[0.2em]"
+          onClick={createNote}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          New note
+        </Button>
       </SidebarHeader>
 
-      <SidebarContent>
-        <div className={`${CARD_CLASSES} p-0`}>
-          {filteredNotes.length === 0 ? (
-            <div className="p-4 text-sm italic text-slate-500 dark:text-slate-400">
-              {searchTerm ? "No documents match that search term." : "No notes available yet."}
-            </div>
-          ) : (
-            <SidebarMenu className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-700">
-              {filteredNotes.map(note => {
-                const isActive = note.id === activeNote?.id;
-                const badgeClass = note.archived ? BADGE_CLASSES.archived : BADGE_CLASSES.active;
-                const badgeLabel = note.archived ? "Archived" : "Active";
-                const transcriptCount = (note.transcript || []).length;
-                return (
-                  <SidebarMenuItem key={note.id}>
-                    <SidebarMenuButton
-                      type="button"
-                      aria-pressed={isActive}
-                      data-active={isActive ? "true" : undefined}
-                      className={cn(
-                        "flex w-full flex-col gap-2 rounded-none border-0 px-4 py-3 text-left text-sm transition",
-                        isActive
-                          ? "border-indigo-400 bg-indigo-50 text-slate-900 dark:border-indigo-500/70 dark:bg-indigo-900/40 dark:text-slate-50"
-                          : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900/60 dark:hover:border-slate-700",
-                        "focus-visible:ring-2 focus-visible:ring-indigo-500/40"
-                      )}
-                      onClick={() => setActiveNoteId(note.id)}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-semibold text-slate-900 dark:text-slate-50 line-clamp-2">
-                          {note.title || "Untitled note"}
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.3em]",
-                            badgeClass
-                          )}
-                        >
-                          {badgeLabel}
-                        </span>
-                      </div>
-                      <p className="text-[0.65rem] text-slate-500 dark:text-slate-400">
-                        Updated {relativeLabel(note.updatedAt || note.createdAt)} · {transcriptCount} entr{transcriptCount === 1 ? "y" : "ies"}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {note.highlightsHtml ? "Highlights saved" : "No highlights yet"}
-                      </p>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          )}
-        </div>
+      <SidebarContent className="space-y-3 px-1 py-2">
+        <p className="px-3 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">
+          History
+        </p>
+        {hasNotes ? (
+          <SidebarMenu className="flex-1 overflow-y-auto px-1">
+            {filteredNotes.map(note => (
+              <SidebarMenuItem key={note.id}>
+                <SidebarMenuButton
+                  type="button"
+                  isActive={note.id === activeNoteId}
+                  onClick={() => setActiveNoteId(note.id)}
+                  className="px-3 py-2 text-sm font-medium"
+                >
+                  <span className="truncate">{note.title || "Untitled note"}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        ) : (
+          <div className="px-3 text-sm text-slate-500 dark:text-slate-400">No notes yet.</div>
+        )}
       </SidebarContent>
-
-      <SidebarFooter>
-        <Button
-          variant="ghost"
-          type="button"
-          className="w-full text-sm"
-          onClick={() => setSearchTerm("")}
-          disabled={!searchTerm}
-        >
-          Clear search
-        </Button>
-      </SidebarFooter>
     </Sidebar>
   );
 }
