@@ -2,7 +2,8 @@ import { Separator } from "@/renderer/components/ui/separator";
 import { SidebarTrigger } from "@/renderer/components/ui/sidebar";
 import { Switch } from "@/renderer/components/ui/switch";
 import { useApp } from "@/renderer/app-provider";
-import { THEME_ICONS } from "@/renderer/settings/constants";
+import { THEME_LABELS, THEME_MODES } from "@/renderer/settings/constants";
+import { Computer, Moon, Sun } from "lucide-react";
 
 export function SiteHeader() {
   const { activeNote, themeMode, systemPrefersDark, handleThemeModeChange } = useApp();
@@ -10,10 +11,16 @@ export function SiteHeader() {
   const tone = themeMode === "system" ? (systemPrefersDark ? "dark" : "light") : themeMode;
   const toneLabel = tone === "dark" ? "Dark" : "Light";
   const modeLabel = themeMode === "system" ? `${toneLabel} (system)` : toneLabel;
-  const icon = THEME_ICONS[themeMode === "system" ? "system" : tone] || (tone === "dark" ? "🌙" : "☀️");
+  const themeModeIndex = THEME_MODES.indexOf(themeMode);
+  const currentModeIndex = themeModeIndex === -1 ? 0 : themeModeIndex;
+  const nextThemeMode = THEME_MODES[(currentModeIndex + 1) % THEME_MODES.length];
+  const nextThemeLabel = THEME_LABELS[nextThemeMode] || nextThemeMode;
+  const iconKey = themeMode === "system" ? "system" : tone === "dark" ? "dark" : "light";
+  const ThemeIcons = { system: Computer, dark: Moon, light: Sun };
+  const CurrentThemeIcon = ThemeIcons[iconKey] || Sun;
 
-  const handleSwitchChange = checked => {
-    handleThemeModeChange(checked ? "dark" : "light");
+  const handleSwitchChange = () => {
+    handleThemeModeChange(nextThemeMode);
   };
 
   return (
@@ -26,13 +33,13 @@ export function SiteHeader() {
         </div>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:text-sm">
-            <span className="text-base leading-4">{icon}</span>
-            <span>{modeLabel}</span>
+            <CurrentThemeIcon className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{modeLabel}</span>
           </span>
           <Switch
             checked={tone === "dark"}
             onCheckedChange={handleSwitchChange}
-            aria-label="Toggle dark/light mode"
+            aria-label={`Switch to ${nextThemeLabel} mode`}
           />
         </div>
       </div>

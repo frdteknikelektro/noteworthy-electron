@@ -124,7 +124,7 @@ export function NoteWorkspace() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="space-y-2">
-        <div className="text-xs font-semibold uppercase tracking-[0.4em] text-muted-foreground">Session title</div>
+        <div className="text-xs font-semibold uppercase text-muted-foreground">Session title</div>
         <Input
           value={activeNote?.title || ""}
           onChange={event => updateNoteTitle(activeNote?.id, event.target.value)}
@@ -137,85 +137,85 @@ export function NoteWorkspace() {
 
       <div className="flex flex-1 flex-col gap-4">
         <Tabs defaultValue="transcription" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="transcription">Transcription</TabsTrigger>
-              <TabsTrigger value="summary">
-                <div className="flex items-center gap-2">
-                  Summary
-                  <Badge variant="secondary" className="text-[0.5rem] font-semibold uppercase tracking-[0.2em]">
-                    {storedSummaries.length}
-                  </Badge>
+          <TabsList>
+            <TabsTrigger value="transcription">Transcription</TabsTrigger>
+            <TabsTrigger value="summary">
+              <div className="flex items-center gap-2">
+                Summary
+                <Badge variant="secondary" className="text-xs font-semibold uppercase">
+                  {storedSummaries.length}
+                </Badge>
+              </div>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="transcription" className="space-y-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant={isCapturing ? "destructive" : "default"}
+                onClick={isCapturing ? stopCapture : startCapture}
+              >
+                {isCapturing ? "Mic (Mute)" : "Mic (Start)"}
+              </Button>
+              <Button
+                variant={isRecording ? "destructive" : "outline"}
+                onClick={toggleRecording}
+                disabled={!isCapturing}
+              >
+                {isRecording ? "Stop recording" : "Record"}
+              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={streamStatus.microphone ? "accent" : "secondary"}>
+                  {streamStatus.microphone ? "Mic active" : "Mic idle"}
+                </Badge>
+                <Badge variant={streamStatus.speaker ? "accent" : "secondary"}>
+                  {streamStatus.speaker ? "System audio" : "System pending"}
+                </Badge>
+                {isRecording && <Badge variant="destructive">Recording</Badge>}
+              </div>
+            </div>
+
+            <div className="max-h-[320px] overflow-y-auto space-y-3">
+              {transcriptEntries.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
+                  Start capture to see live transcription entries.
                 </div>
-              </TabsTrigger>
-            </TabsList>
+              ) : (
+                transcriptEntries.map(entry => (
+                  <article
+                    key={entry.id}
+                    className={cn(
+                      "space-y-2 rounded-xl border border-border bg-background/80 p-4",
+                      "shadow-sm"
+                    )}
+                  >
+                    <header className="flex flex-wrap items-center gap-2 text-xs uppercase text-muted-foreground">
+                      <Badge variant={entry.source === "microphone" ? "accent" : "secondary"}>
+                        {SOURCE_LABELS[entry.source] || entry.source}
+                      </Badge>
+                      {entry.statusLabel && <span>{entry.statusLabel}</span>}
+                      <span>{formatTimestamp(entry.timestamp)}</span>
+                    </header>
+                    <p className={cn("text-sm text-foreground", entry.isDraft ? "font-medium text-muted-foreground" : "text-foreground")}>
+                      {entry.text || "Waiting for audio…"}
+                    </p>
+                  </article>
+                ))
+              )}
+            </div>
+          </TabsContent>
 
-            <TabsContent value="transcription" className="space-y-6">
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  variant={isCapturing ? "destructive" : "default"}
-                  onClick={isCapturing ? stopCapture : startCapture}
-                >
-                  {isCapturing ? "Mic (Mute)" : "Mic (Start)"}
-                </Button>
-                <Button
-                  variant={isRecording ? "destructive" : "outline"}
-                  onClick={toggleRecording}
-                  disabled={!isCapturing}
-                >
-                  {isRecording ? "Stop recording" : "Record"}
-                </Button>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant={streamStatus.microphone ? "accent" : "secondary"}>
-                    {streamStatus.microphone ? "Mic active" : "Mic idle"}
-                  </Badge>
-                  <Badge variant={streamStatus.speaker ? "accent" : "secondary"}>
-                    {streamStatus.speaker ? "System audio" : "System pending"}
-                  </Badge>
-                  {isRecording && <Badge variant="destructive">Recording</Badge>}
-                </div>
-              </div>
-
-              <div className="max-h-[320px] overflow-y-auto space-y-3">
-                {transcriptEntries.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
-                    Start capture to see live transcription entries.
-                  </div>
-                ) : (
-                  transcriptEntries.map(entry => (
-                    <article
-                      key={entry.id}
-                      className={cn(
-                        "space-y-2 rounded-xl border border-border bg-background/80 p-4",
-                        "shadow-sm"
-                      )}
-                    >
-                      <header className="flex flex-wrap items-center gap-2 text-[0.65rem] uppercase tracking-[0.3em] text-muted-foreground">
-                        <Badge variant={entry.source === "microphone" ? "accent" : "secondary"}>
-                          {SOURCE_LABELS[entry.source] || entry.source}
-                        </Badge>
-                        {entry.statusLabel && <span>{entry.statusLabel}</span>}
-                        <span>{formatTimestamp(entry.timestamp)}</span>
-                      </header>
-                      <p className={cn("text-sm text-foreground", entry.isDraft ? "font-medium text-muted-foreground" : "text-foreground")}>
-                        {entry.text || "Waiting for audio…"}
-                      </p>
-                    </article>
-                  ))
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="summary" className="space-y-5">
-              <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-[0.4em] text-muted-foreground">Summary prompt</div>
-                <textarea
-                  value={summaryPrompt}
-                  onChange={event => setSummaryPrompt(event.target.value)}
-                  placeholder="E.g., highlight key decisions, action items, or next steps."
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  rows={4}
-                />
-              </div>
+          <TabsContent value="summary" className="space-y-5">
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Summary prompt</div>
+              <textarea
+                value={summaryPrompt}
+                onChange={event => setSummaryPrompt(event.target.value)}
+                placeholder="E.g., highlight key decisions, action items, or next steps."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                rows={4}
+              />
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button onClick={handleGenerateSummary} disabled={!canGenerateSummary || isGenerating}>
                 {isGenerating ? "Generating…" : "Generate summary"}
@@ -229,38 +229,38 @@ export function NoteWorkspace() {
               <p className="text-xs text-foreground">{summaryFeedback}</p>
             )}
 
-              <div className="space-y-3">
-                {storedSummaries.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Summaries based on the transcript will show up here.
-                  </p>
-                ) : (
-                  storedSummaries.map((entry, index) => (
-                    <article
-                      key={entry.id}
-                      className="space-y-2 rounded-xl border border-border bg-background/80 p-4 shadow-sm"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[0.65rem] uppercase tracking-[0.3em] text-muted-foreground">
-                        <span>{formatTimestamp(entry.createdAt)}</span>
-                        <Badge variant="secondary">Doc {storedSummaries.length - index}</Badge>
-                      </div>
-                      <p className="text-sm font-semibold text-foreground">{entry.prompt}</p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleCopySummary(entry)}>
-                          Copy
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDownloadSummary(entry)}>
-                          Download
-                        </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-line">{entry.body}</p>
-                    </article>
-                  ))
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+            <div className="space-y-3">
+              {storedSummaries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Summaries based on the transcript will show up here.
+                </p>
+              ) : (
+                storedSummaries.map((entry, index) => (
+                  <article
+                    key={entry.id}
+                    className="space-y-2 rounded-xl border border-border bg-background/80 p-4 shadow-sm"
+                  >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase text-muted-foreground">
+                      <span>{formatTimestamp(entry.createdAt)}</span>
+                      <Badge variant="secondary">Doc {storedSummaries.length - index}</Badge>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">{entry.prompt}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleCopySummary(entry)}>
+                        Copy
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleDownloadSummary(entry)}>
+                        Download
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-line">{entry.body}</p>
+                  </article>
+                ))
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
+    </div>
   );
 }

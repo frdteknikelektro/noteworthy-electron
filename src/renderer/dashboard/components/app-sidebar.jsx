@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 
 import { Button } from "@/renderer/components/ui/button";
 import {
@@ -31,7 +31,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
         <Button
           variant="outline"
           size="sm"
-          className="w-full uppercase tracking-[0.2em]"
+          className="w-full uppercase"
           onClick={createNote}
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -39,7 +39,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
         </Button>
       </SidebarHeader>
       <SidebarContent className="flex-1 space-y-3 px-1 py-2">
-        <p className="px-3 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-muted-foreground">
+        <p className="px-3 text-xs font-semibold uppercase text-muted-foreground">
           History
         </p>
         {hasNotes ? (
@@ -65,9 +65,10 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
         <Button
           variant="ghost"
           size="sm"
-          className="w-full uppercase tracking-[0.25em]"
+          className="w-full uppercase"
           onClick={openSettings}
         >
+          <Settings className="mr-2 h-4 w-4" aria-hidden="true" />
           Settings
         </Button>
       </SidebarFooter>
