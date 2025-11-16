@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Settings } from "lucide-react";
+import { MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
 
 import { Button } from "@/renderer/components/ui/button";
 import {
@@ -12,10 +12,24 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/renderer/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/renderer/components/ui/dropdown-menu";
 import { useApp } from "@/renderer/app-provider";
 
 export function AppSidebar({ variant = "sidebar", className, ...props }) {
-  const { filteredNotes, activeNoteId, setActiveNoteId, createNote, openSettings } = useApp();
+  const { filteredNotes, activeNoteId, setActiveNoteId, createNote, openSettings, deleteNote } = useApp();
+
+  const handleDeleteNote = note => {
+    if (!note?.id) return;
+    const name = note.title?.trim() || "Untitled note";
+    const confirmed = window.confirm(`Delete "${name}" and all associated transcript content? This cannot be undone.`);
+    if (!confirmed) return;
+    deleteNote(note.id);
+  };
 
   const hasNotes = filteredNotes.length > 0;
 
@@ -50,10 +64,31 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
                   type="button"
                   isActive={note.id === activeNoteId}
                   onClick={() => setActiveNoteId(note.id)}
-                  className="px-3 py-2 text-sm font-medium"
+                  className="px-3 py-2 text-sm font-medium pr-10"
                 >
                   <span className="truncate">{note.title || "Untitled note"}</span>
                 </SidebarMenuButton>
+                <div className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center group-data-[collapsible=icon]:hidden">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        type="button"
+                        className="h-8 w-8 p-0"
+                        aria-label={`Open actions for ${note.title || "note"}`}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => handleDeleteNote(note)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <span>Delete note</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>

@@ -615,6 +615,12 @@ export function AppProvider({ children }) {
     setNotes(prev => prev.filter(note => !note.archived));
   }, []);
 
+  const deleteNote = useCallback(noteId => {
+    if (!noteId) return;
+    setNotes(prev => prev.filter(note => note.id !== noteId));
+    setActiveNoteId(active => (active === noteId ? null : active));
+  }, []);
+
 
   const generateSummary = useCallback(
     async (noteId, promptText) => {
@@ -710,6 +716,7 @@ export function AppProvider({ children }) {
       appendTranscriptEntry,
       archiveNote,
       deleteArchivedNotes,
+      deleteNote,
       preferences,
       handleLanguageChange,
       handlePromptChange,
@@ -747,6 +754,7 @@ export function AppProvider({ children }) {
       appendTranscriptEntry,
       archiveNote,
       deleteArchivedNotes,
+      deleteNote,
       preferences,
       handleLanguageChange,
       handlePromptChange,
