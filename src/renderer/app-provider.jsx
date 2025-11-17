@@ -86,6 +86,8 @@ function initNotesState() {
   }
 }
 
+export const DEFAULT_MIC_SELECTION_VALUE = "__default-mic__";
+
 const STREAM_META = {
   microphone: { statusId: "microphone", messageSource: "microphone", errorLabel: "microphone" },
   system_audio: { statusId: "speaker", messageSource: "speaker", errorLabel: "system audio" }
@@ -166,10 +168,12 @@ export function AppProvider({ children }) {
   const [model, setModel] = useState("gpt-4o-mini-transcribe");
   const [micDeviceId, setMicDeviceId] = useState("");
   const [micDevices, setMicDevices] = useState([]);
+  const [micMuted, setMicMuted] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [drafts, setDrafts] = useState({ microphone: null, speaker: null });
   const [streamStatus, setStreamStatus] = useState({ microphone: false, speaker: false });
   const [isRecording, setIsRecording] = useState(false);
+  const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themeMode, setThemeMode] = useState(() => loadStoredThemeMode());
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark());
@@ -179,6 +183,8 @@ export function AppProvider({ children }) {
   const microphoneStreamRef = useRef(null);
   const systemAudioStreamRef = useRef(null);
   const wavRecorderRef = useRef(new WavRecorder());
+  const prevMicDeviceRef = useRef(micDeviceId);
+  const prevSystemAudioRef = useRef(systemAudioEnabled);
 
   const activeNote = useMemo(
     () => notes.find(note => note.id === activeNoteId) || notes[0] || null,
@@ -413,13 +419,22 @@ export function AppProvider({ children }) {
   );
 
   const setupRealtimeSessions = useCallback(
-    async sessionConfig => {
+    async (sessionConfig, includeSystemAudio) => {
       microphoneSessionRef.current = createRealtimeSession("microphone");
-      systemAudioSessionRef.current = createRealtimeSession("system_audio");
-      await Promise.all([
-        microphoneSessionRef.current.startTranscription(microphoneStreamRef.current, sessionConfig),
-        systemAudioSessionRef.current.startTranscription(systemAudioStreamRef.current, sessionConfig)
-      ]);
+      const sessionPromises = [
+        microphoneSessionRef.current.startTranscription(microphoneStreamRef.current, sessionConfig)
+      ];
+
+      if (includeSystemAudio && systemAudioStreamRef.current) {
+        systemAudioSessionRef.current = createRealtimeSession("system_audio");
+        sessionPromises.push(
+          systemAudioSessionRef.current.startTranscription(systemAudioStreamRef.current, sessionConfig)
+        );
+      } else {
+        systemAudioSessionRef.current = null;
+      }
+
+      await Promise.all(sessionPromises);
     },
     [createRealtimeSession]
   );
@@ -431,24 +446,44 @@ export function AppProvider({ children }) {
         video: false
       });
 
-      if (window.electronAPI?.enableLoopbackAudio) {
-        await window.electronAPI.enableLoopbackAudio();
-      }
+      let displayStream = null;
+      let loopbackEnabled = false;
 
-      let displayStream;
-      try {
-        displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
-      } finally {
-        if (window.electronAPI?.disableLoopbackAudio) {
-          await window.electronAPI.disableLoopbackAudio();
+      if (systemAudioEnabled) {
+        if (window.electronAPI?.enableLoopbackAudio) {
+          await window.electronAPI.enableLoopbackAudio();
+          loopbackEnabled = true;
+        }
+
+        try {
+          displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+        } finally {
+          if (loopbackEnabled && window.electronAPI?.disableLoopbackAudio) {
+            await window.electronAPI.disableLoopbackAudio();
+          }
+        }
+
+        if (displayStream) {
+          stripVideoTracks(displayStream);
         }
       }
 
-      stripVideoTracks(displayStream);
       return { microphone, systemAudio: displayStream };
     },
-    [micDeviceId]
+    [micDeviceId, systemAudioEnabled]
   );
+
+  const applyMicMute = useCallback(muted => {
+    const stream = microphoneStreamRef.current;
+    if (!stream) return;
+    stream.getAudioTracks().forEach(track => {
+      track.enabled = !muted;
+    });
+  }, []);
+
+  useEffect(() => {
+    applyMicMute(micMuted);
+  }, [applyMicMute, micMuted]);
 
   const buildSessionConfig = useCallback(() => {
     const transcription = {
@@ -497,19 +532,43 @@ export function AppProvider({ children }) {
       try {
         const streams = await captureMediaStreams();
         microphoneStreamRef.current = streams.microphone;
-        systemAudioStreamRef.current = streams.systemAudio;
+        applyMicMute(micMuted);
+        const includeSystemAudio = systemAudioEnabled && Boolean(streams.systemAudio);
+        systemAudioStreamRef.current = includeSystemAudio ? streams.systemAudio : null;
         const sessionConfig = buildSessionConfig();
-        await setupRealtimeSessions(sessionConfig);
+        await setupRealtimeSessions(sessionConfig, includeSystemAudio);
         updateStatus("microphone", true);
-        updateStatus("speaker", true);
+        updateStatus("speaker", includeSystemAudio);
       } catch (error) {
         console.error("Error starting capture:", error);
         alert(`Error starting capture: ${error.message}`);
         stopCapture();
       }
     },
-    [buildSessionConfig, captureMediaStreams, ensureCapturePreconditions, setupRealtimeSessions, stopCapture, updateStatus]
+    [applyMicMute, buildSessionConfig, captureMediaStreams, ensureCapturePreconditions, micMuted, setupRealtimeSessions, stopCapture, systemAudioEnabled, updateStatus]
   );
+
+  useEffect(() => {
+    if (!isCapturing) {
+      prevMicDeviceRef.current = micDeviceId;
+      return;
+    }
+    if (prevMicDeviceRef.current === micDeviceId) return;
+    prevMicDeviceRef.current = micDeviceId;
+    stopCapture();
+    void startCapture();
+  }, [isCapturing, micDeviceId, startCapture, stopCapture]);
+
+  useEffect(() => {
+    if (!isCapturing) {
+      prevSystemAudioRef.current = systemAudioEnabled;
+      return;
+    }
+    if (prevSystemAudioRef.current === systemAudioEnabled) return;
+    prevSystemAudioRef.current = systemAudioEnabled;
+    stopCapture();
+    void startCapture();
+  }, [isCapturing, systemAudioEnabled, startCapture, stopCapture]);
 
   const toggleRecording = useCallback(async () => {
     try {
@@ -544,8 +603,21 @@ export function AppProvider({ children }) {
     setModel(event.target.value);
   }, []);
 
-  const handleMicChange = useCallback(event => {
-    setMicDeviceId(event.target.value);
+  const handleMicChange = useCallback(valueOrEvent => {
+    const rawValue = typeof valueOrEvent === "string" ? valueOrEvent : valueOrEvent?.target?.value;
+    if (rawValue === DEFAULT_MIC_SELECTION_VALUE) {
+      setMicDeviceId("");
+      return;
+    }
+    setMicDeviceId(rawValue || "");
+  }, []);
+
+  const toggleMicMute = useCallback(() => {
+    setMicMuted(prev => !prev);
+  }, []);
+
+  const toggleSystemAudio = useCallback(() => {
+    setSystemAudioEnabled(prev => !prev);
   }, []);
 
   const handleThemeModeChange = useCallback(mode => {
@@ -575,10 +647,27 @@ export function AppProvider({ children }) {
   }, [notes, searchTerm]);
 
   const createNote = useCallback(() => {
+    if (isCapturing) {
+      alert("Stop capture before creating a new note.");
+      return;
+    }
     const note = createFreshNote();
     setNotes(prev => [note, ...prev]);
     setActiveNoteId(note.id);
-  }, []);
+    setMicMuted(false);
+    setSystemAudioEnabled(true);
+  }, [isCapturing]);
+
+  const selectNote = useCallback(
+    noteId => {
+      if (isCapturing) {
+        alert("Stop capture before switching notes.");
+        return;
+      }
+      setActiveNoteId(noteId);
+    },
+    [isCapturing]
+  );
 
   const updateNote = useCallback((noteId, updates) => {
     if (!noteId) return;
@@ -709,7 +798,7 @@ export function AppProvider({ children }) {
       setSearchTerm,
       activeNote,
       activeNoteId,
-      setActiveNoteId,
+      selectNote,
       createNote,
       updateNoteTitle,
       updateNoteHighlights,
@@ -726,6 +815,10 @@ export function AppProvider({ children }) {
       micDeviceId,
       handleMicChange,
       micDevices,
+      micMuted,
+      toggleMicMute,
+      systemAudioEnabled,
+      toggleSystemAudio,
       isCapturing,
       startCapture,
       stopCapture,
@@ -748,6 +841,7 @@ export function AppProvider({ children }) {
       searchTerm,
       activeNote,
       activeNoteId,
+      selectNote,
       createNote,
       updateNoteTitle,
       updateNoteHighlights,
@@ -764,6 +858,10 @@ export function AppProvider({ children }) {
       micDeviceId,
       handleMicChange,
       micDevices,
+      micMuted,
+      toggleMicMute,
+      systemAudioEnabled,
+      toggleSystemAudio,
       isCapturing,
       startCapture,
       stopCapture,

@@ -21,7 +21,7 @@ import {
 import { useApp } from "@/renderer/app-provider";
 
 export function AppSidebar({ variant = "sidebar", className, ...props }) {
-  const { filteredNotes, activeNoteId, setActiveNoteId, createNote, openSettings, deleteNote } = useApp();
+  const { filteredNotes, activeNoteId, selectNote, createNote, openSettings, deleteNote, isCapturing } = useApp();
 
   const handleDeleteNote = note => {
     if (!note?.id) return;
@@ -47,6 +47,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
           size="sm"
           className="w-full uppercase"
           onClick={createNote}
+          disabled={isCapturing}
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           New note
@@ -63,7 +64,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
                 <SidebarMenuButton
                   type="button"
                   isActive={note.id === activeNoteId}
-                  onClick={() => setActiveNoteId(note.id)}
+                  onClick={() => selectNote(note.id)}
                   className="px-3 py-2 text-sm font-medium pr-10"
                 >
                   <span className="truncate">{note.title || "Untitled note"}</span>

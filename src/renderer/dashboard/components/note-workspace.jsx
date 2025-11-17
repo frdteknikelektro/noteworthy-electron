@@ -1,11 +1,19 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Mic2, MicOff, Volume2, VolumeX } from "lucide-react";
 
-import { useApp } from "@/renderer/app-provider";
+import { useApp, DEFAULT_MIC_SELECTION_VALUE } from "@/renderer/app-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/renderer/components/ui/select";
 import { cn } from "@/renderer/lib/utils";
 
 const SOURCE_LABELS = {
@@ -26,6 +34,21 @@ function compareTimestamps(valueA, valueB) {
   return timestampB.localeCompare(timestampA);
 }
 
+function StreamIndicator({ label, active, accentClasses }) {
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-border/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+      <span
+        className={cn(
+          "h-2.5 w-2.5 rounded-full border transition",
+          active ? accentClasses : "bg-muted border-border/60"
+        )}
+        aria-hidden="true"
+      />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export function NoteWorkspace() {
   const {
     activeNote,
@@ -38,13 +61,18 @@ export function NoteWorkspace() {
     streamStatus,
     updateNoteTitle,
     generateSummary,
+    micDevices,
+    micDeviceId,
+    handleMicChange,
+    micMuted,
+    toggleMicMute,
+    systemAudioEnabled,
+    toggleSystemAudio,
   } = useApp();
 
   const titleRef = useRef(null);
   const previousNoteIdRef = useRef(null);
   const transcriptsRef = useRef(null);
-  const hadActiveDraftRef = useRef(false);
-
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [summaryError, setSummaryError] = useState("");
@@ -67,6 +95,11 @@ export function NoteWorkspace() {
     [sortedDraftEntries, sortedNoteEntries]
   );
 
+  const availableMicDevices = useMemo(
+    () => micDevices.filter(device => Boolean(device.deviceId)),
+    [micDevices]
+  );
+
   const hasActiveDraft = sortedDraftEntries.length > 0;
 
   const updatedTimestamp = useMemo(() => formatTimestamp(activeNote?.updatedAt), [activeNote?.updatedAt]);
@@ -74,19 +107,7 @@ export function NoteWorkspace() {
   const storedSummaries = activeNote?.summaries || [];
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
-  const showListeningFallback = isCapturing && !hasActiveDraft;
-  const isListening = hasActiveDraft || showListeningFallback;
-
-  useLayoutEffect(() => {
-    if (!isListening) {
-      hadActiveDraftRef.current = false;
-      return;
-    }
-    if (!hadActiveDraftRef.current) {
-      transcriptsRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-    hadActiveDraftRef.current = true;
-  }, [isListening]);
+  const isListening = hasActiveDraft;
 
   useLayoutEffect(() => {
     const titleElement = titleRef.current;
@@ -172,11 +193,7 @@ export function NoteWorkspace() {
     }
   };
 
-  const showPlaceholder = transcriptEntries.length === 0 && !showListeningFallback;
-  const listeningSources = [];
-  if (streamStatus.microphone) listeningSources.push("microphone");
-  if (streamStatus.speaker) listeningSources.push("speaker");
-
+  const showPlaceholder = transcriptEntries.length === 0;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -224,28 +241,67 @@ export function NoteWorkspace() {
           </TabsList>
 
           <TabsContent value="transcription" className="space-y-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                variant={isCapturing ? "destructive" : "default"}
-                onClick={isCapturing ? stopCapture : startCapture}
-              >
-                {isCapturing ? "Mic (Mute)" : "Mic (Start)"}
-              </Button>
-              <Button
-                variant={isRecording ? "destructive" : "outline"}
-                onClick={toggleRecording}
-                disabled={!isCapturing}
-              >
-                {isRecording ? "Stop recording" : "Record"}
-              </Button>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant={streamStatus.microphone ? "accent" : "secondary"}>
-                  {streamStatus.microphone ? "Mic active" : "Mic idle"}
-                </Badge>
-                <Badge variant={streamStatus.speaker ? "accent" : "secondary"}>
-                  {streamStatus.speaker ? "System audio" : "System pending"}
-                </Badge>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant={isCapturing ? "destructive" : "default"}
+                  onClick={isCapturing ? stopCapture : startCapture}
+                >
+                  {isCapturing ? "Stop" : "Start"}
+                </Button>
+                <Button
+                  variant={isRecording ? "destructive" : "outline"}
+                  onClick={toggleRecording}
+                  disabled={!isCapturing}
+                >
+                  {isRecording ? "Stop recording" : "Record"}
+                </Button>
                 {isRecording && <Badge variant="destructive">Recording</Badge>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
+                <Button
+                  size="sm"
+                  variant={micMuted ? "outline" : "secondary"}
+                  onClick={toggleMicMute}
+                  className="gap-2"
+                >
+                  {micMuted ? <MicOff className="h-4 w-4" /> : <Mic2 className="h-4 w-4" />}
+                  {micMuted ? "Mic muted" : "Mic live"}
+                </Button>
+                <Select value={micDeviceId || DEFAULT_MIC_SELECTION_VALUE} onValueChange={handleMicChange}>
+                  <SelectTrigger className="min-w-[170px] text-sm font-medium">
+                    <SelectValue placeholder="Default microphone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem key="default-mic" value={DEFAULT_MIC_SELECTION_VALUE}>Default microphone</SelectItem>
+                    {availableMicDevices.map((device, index) => (
+                      <SelectItem key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Microphone ${index + 1}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant={systemAudioEnabled ? "secondary" : "outline"}
+                  onClick={toggleSystemAudio}
+                  className="gap-2"
+                >
+                  {systemAudioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  {systemAudioEnabled ? "System on" : "System off"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <StreamIndicator
+                  label="Mic"
+                  active={isCapturing && streamStatus.microphone && !micMuted}
+                  accentClasses="bg-emerald-400 border-emerald-600 shadow-[0_0_0_3px_rgba(16,185,129,0.45)]"
+                />
+                <StreamIndicator
+                  label="System"
+                  active={isCapturing && streamStatus.speaker}
+                  accentClasses="bg-sky-400 border-sky-600 shadow-[0_0_0_3px_rgba(56,189,248,0.35)]"
+                />
               </div>
             </div>
 
@@ -253,31 +309,6 @@ export function NoteWorkspace() {
               <p className="text-xs text-muted-foreground">
                 Showing every transcript entry, newest first, so you always see the full capture without a scroll trap.
               </p>
-              {showListeningFallback && (
-                <article
-                  key="listening-fallback"
-                  className={cn(
-                    "space-y-2 rounded-xl border border-border bg-background/80 p-4",
-                    "shadow-sm"
-                  )}
-                >
-                  <header className="flex flex-wrap items-center gap-2 text-xs uppercase text-muted-foreground">
-                    {listeningSources.length > 0 ? (
-                      listeningSources.map(source => (
-                        <Badge key={`listening-${source}`} variant="accent">
-                          {SOURCE_LABELS[source] || source}
-                        </Badge>
-                      ))
-                    ) : (
-                      <Badge variant="accent">Live capture</Badge>
-                    )}
-                    <span>Listening…</span>
-                  </header>
-                  <p className="text-sm text-foreground">
-                    The stream is live. Speak a few words and the transcript will appear here shortly.
-                  </p>
-                </article>
-              )}
               {showPlaceholder ? (
                 <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
                   Start capture to see live transcription entries.
