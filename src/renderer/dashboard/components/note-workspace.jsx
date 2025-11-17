@@ -74,7 +74,7 @@ export function NoteWorkspace() {
   const storedSummaries = activeNote?.summaries || [];
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
-  const showListeningFallback = isCapturing && transcriptEntries.length === 0;
+  const showListeningFallback = isCapturing && !hasActiveDraft;
   const isListening = hasActiveDraft || showListeningFallback;
 
   useLayoutEffect(() => {
