@@ -20,6 +20,12 @@ function formatTimestamp(value) {
   return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+function compareTimestamps(valueA, valueB) {
+  const timestampA = valueA || "";
+  const timestampB = valueB || "";
+  return timestampB.localeCompare(timestampA);
+}
+
 export function NoteWorkspace() {
   const {
     activeNote,
@@ -36,25 +42,51 @@ export function NoteWorkspace() {
 
   const titleRef = useRef(null);
   const previousNoteIdRef = useRef(null);
+  const transcriptsRef = useRef(null);
+  const hadActiveDraftRef = useRef(false);
 
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [summaryError, setSummaryError] = useState("");
   const [summaryFeedback, setSummaryFeedback] = useState("");
 
-  const transcriptEntries = useMemo(() => {
-    const noteEntries = activeNote?.transcript || [];
-    const draftEntries = Object.values(drafts)
+  const sortedDraftEntries = useMemo(() => {
+    const entries = Object.values(drafts)
       .filter(Boolean)
       .map(draft => ({ ...draft, isDraft: true }));
-    return [...noteEntries, ...draftEntries];
-  }, [activeNote, drafts]);
+    return entries.sort((a, b) => compareTimestamps(a.timestamp, b.timestamp));
+  }, [drafts]);
+
+  const sortedNoteEntries = useMemo(() => {
+    const entries = [...(activeNote?.transcript || [])];
+    return entries.sort((a, b) => compareTimestamps(a.timestamp, b.timestamp));
+  }, [activeNote?.transcript]);
+
+  const transcriptEntries = useMemo(
+    () => [...sortedDraftEntries, ...sortedNoteEntries],
+    [sortedDraftEntries, sortedNoteEntries]
+  );
+
+  const hasActiveDraft = sortedDraftEntries.length > 0;
 
   const updatedTimestamp = useMemo(() => formatTimestamp(activeNote?.updatedAt), [activeNote?.updatedAt]);
 
   const storedSummaries = activeNote?.summaries || [];
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
+  const showListeningFallback = isCapturing && transcriptEntries.length === 0;
+  const isListening = hasActiveDraft || showListeningFallback;
+
+  useLayoutEffect(() => {
+    if (!isListening) {
+      hadActiveDraftRef.current = false;
+      return;
+    }
+    if (!hadActiveDraftRef.current) {
+      transcriptsRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    hadActiveDraftRef.current = true;
+  }, [isListening]);
 
   useLayoutEffect(() => {
     const titleElement = titleRef.current;
@@ -140,6 +172,11 @@ export function NoteWorkspace() {
     }
   };
 
+  const showPlaceholder = transcriptEntries.length === 0 && !showListeningFallback;
+  const listeningSources = [];
+  if (streamStatus.microphone) listeningSources.push("microphone");
+  if (streamStatus.speaker) listeningSources.push("speaker");
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -212,8 +249,36 @@ export function NoteWorkspace() {
               </div>
             </div>
 
-            <div className="max-h-[320px] overflow-y-auto space-y-3">
-              {transcriptEntries.length === 0 ? (
+            <div ref={transcriptsRef} className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Showing every transcript entry, newest first, so you always see the full capture without a scroll trap.
+              </p>
+              {showListeningFallback && (
+                <article
+                  key="listening-fallback"
+                  className={cn(
+                    "space-y-2 rounded-xl border border-border bg-background/80 p-4",
+                    "shadow-sm"
+                  )}
+                >
+                  <header className="flex flex-wrap items-center gap-2 text-xs uppercase text-muted-foreground">
+                    {listeningSources.length > 0 ? (
+                      listeningSources.map(source => (
+                        <Badge key={`listening-${source}`} variant="accent">
+                          {SOURCE_LABELS[source] || source}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge variant="accent">Live capture</Badge>
+                    )}
+                    <span>Listening…</span>
+                  </header>
+                  <p className="text-sm text-foreground">
+                    The stream is live. Speak a few words and the transcript will appear here shortly.
+                  </p>
+                </article>
+              )}
+              {showPlaceholder ? (
                 <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
                   Start capture to see live transcription entries.
                 </div>
