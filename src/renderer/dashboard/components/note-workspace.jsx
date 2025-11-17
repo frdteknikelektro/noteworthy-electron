@@ -1,9 +1,9 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Mic2, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Circle, CircleDot, Mic2, StopCircle, Square, Volume2 } from "lucide-react";
 
-import { useApp, DEFAULT_MIC_SELECTION_VALUE } from "@/renderer/app-provider";
+import { useApp } from "@/renderer/app-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
@@ -34,18 +34,15 @@ function compareTimestamps(valueA, valueB) {
   return timestampB.localeCompare(timestampA);
 }
 
-function StreamIndicator({ label, active, accentClasses }) {
+function LedDot({ active, activeClass }) {
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-      <span
-        className={cn(
-          "h-2.5 w-2.5 rounded-full border transition",
-          active ? accentClasses : "bg-muted border-border/60"
-        )}
-        aria-hidden="true"
-      />
-      <span>{label}</span>
-    </div>
+    <span
+      className={cn(
+        "absolute -top-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-border/60 transition-colors",
+        active ? activeClass : "bg-muted-foreground/60 border-border/60"
+      )}
+      aria-hidden="true"
+    />
   );
 }
 
@@ -194,6 +191,8 @@ export function NoteWorkspace() {
   };
 
   const showPlaceholder = transcriptEntries.length === 0;
+  const micIndicatorActive = isCapturing && streamStatus.microphone && !micMuted;
+  const speakerIndicatorActive = isCapturing && streamStatus.speaker && systemAudioEnabled;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -241,73 +240,103 @@ export function NoteWorkspace() {
           </TabsList>
 
           <TabsContent value="transcription" className="space-y-6">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant={isCapturing ? "destructive" : "default"}
-                  onClick={isCapturing ? stopCapture : startCapture}
-                >
-                  {isCapturing ? "Stop" : "Start"}
-                </Button>
-                <Button
-                  variant={isRecording ? "destructive" : "outline"}
-                  onClick={toggleRecording}
-                  disabled={!isCapturing}
-                >
-                  {isRecording ? "Stop recording" : "Record"}
-                </Button>
-                {isRecording && <Badge variant="destructive">Recording</Badge>}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
-                <Button
-                  size="sm"
-                  variant={micMuted ? "outline" : "secondary"}
-                  onClick={toggleMicMute}
-                  className="gap-2"
-                >
-                  {micMuted ? <MicOff className="h-4 w-4" /> : <Mic2 className="h-4 w-4" />}
-                  {micMuted ? "Mic muted" : "Mic live"}
-                </Button>
-                <Select value={micDeviceId || DEFAULT_MIC_SELECTION_VALUE} onValueChange={handleMicChange}>
-                  <SelectTrigger className="min-w-[170px] text-sm font-medium">
-                    <SelectValue placeholder="Default microphone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem key="default-mic" value={DEFAULT_MIC_SELECTION_VALUE}>Default microphone</SelectItem>
-                    {availableMicDevices.map((device, index) => (
-                      <SelectItem key={device.deviceId} value={device.deviceId}>
-                        {device.label || `Microphone ${index + 1}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  size="sm"
-                  variant={systemAudioEnabled ? "secondary" : "outline"}
-                  onClick={toggleSystemAudio}
-                  className="gap-2"
-                >
-                  {systemAudioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-                  {systemAudioEnabled ? "System on" : "System off"}
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <StreamIndicator
-                  label="Mic"
-                  active={isCapturing && streamStatus.microphone && !micMuted}
-                  accentClasses="bg-emerald-400 border-emerald-600 shadow-[0_0_0_3px_rgba(16,185,129,0.45)]"
-                />
-                <StreamIndicator
-                  label="System"
-                  active={isCapturing && streamStatus.speaker}
-                  accentClasses="bg-sky-400 border-sky-600 shadow-[0_0_0_3px_rgba(56,189,248,0.35)]"
-                />
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant={isCapturing ? "destructive" : "secondary"}
+                    onClick={isCapturing ? stopCapture : startCapture}
+                    aria-label={isCapturing ? "Stop capture" : "Start capture"}
+                  >
+                    {isCapturing ? <StopCircle className="h-4 w-4" /> : <CircleDot className="h-4 w-4" />}
+                  </Button>
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {isCapturing ? "Capturing" : "Capture"}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant={isRecording ? "destructive" : "outline"}
+                    onClick={toggleRecording}
+                    disabled={!isCapturing}
+                    aria-label={isRecording ? "Stop recording" : "Start recording"}
+                  >
+                    {isRecording ? <Square className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                  </Button>
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {isRecording ? "Recording" : "Record"}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant={micIndicatorActive ? "secondary" : "outline"}
+                    onClick={toggleMicMute}
+                    disabled={!micDeviceId}
+                    className="relative"
+                    aria-label={
+                      micDeviceId
+                        ? micIndicatorActive
+                          ? "Mute microphone"
+                          : "Enable microphone"
+                        : "Select a microphone to activate the mic"
+                    }
+                  >
+                    <Mic2 className="h-4 w-4" />
+                    <LedDot
+                      active={micIndicatorActive}
+                      activeClass="bg-emerald-400 border-emerald-600 shadow-[0_0_0_4px_rgba(16,185,129,0.35)]"
+                    />
+                  </Button>
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Mic</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant={systemAudioEnabled ? "secondary" : "outline"}
+                    onClick={toggleSystemAudio}
+                    className="relative"
+                    aria-label={systemAudioEnabled ? "Disable system audio" : "Enable system audio"}
+                  >
+                    <Volume2 className="h-4 w-4" />
+                    <LedDot
+                      active={speakerIndicatorActive}
+                      activeClass="bg-sky-400 border-sky-600 shadow-[0_0_0_4px_rgba(14,165,233,0.35)]"
+                    />
+                  </Button>
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Speaker</span>
+                </div>
+                <div className="min-w-[200px] max-w-xs flex-1 space-y-1">
+                  <Select value={micDeviceId || ""} onValueChange={handleMicChange}>
+                    <SelectTrigger className="w-full text-sm font-medium">
+                      <SelectValue
+                        placeholder={availableMicDevices.length ? "Select microphone" : "No microphones detected"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableMicDevices.length === 0 ? (
+                        <SelectItem key="no-mic" value="no-mic" disabled>
+                          No microphones detected
+                        </SelectItem>
+                      ) : (
+                        availableMicDevices.map((device, index) => (
+                          <SelectItem key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Microphone ${index + 1}`}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Select a microphone to turn it on.</p>
+                </div>
               </div>
             </div>
 
             <div ref={transcriptsRef} className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Showing every transcript entry, newest first, so you always see the full capture without a scroll trap.
+                Showing every transcript entry, newest first.
               </p>
               {showPlaceholder ? (
                 <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">

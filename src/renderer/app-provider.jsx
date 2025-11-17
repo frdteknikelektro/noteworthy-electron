@@ -86,8 +86,6 @@ function initNotesState() {
   }
 }
 
-export const DEFAULT_MIC_SELECTION_VALUE = "__default-mic__";
-
 const STREAM_META = {
   microphone: { statusId: "microphone", messageSource: "microphone", errorLabel: "microphone" },
   system_audio: { statusId: "speaker", messageSource: "speaker", errorLabel: "system audio" }
@@ -604,12 +602,13 @@ export function AppProvider({ children }) {
   }, []);
 
   const handleMicChange = useCallback(valueOrEvent => {
-    const rawValue = typeof valueOrEvent === "string" ? valueOrEvent : valueOrEvent?.target?.value;
-    if (rawValue === DEFAULT_MIC_SELECTION_VALUE) {
-      setMicDeviceId("");
-      return;
+    const rawValue =
+      typeof valueOrEvent === "string" ? valueOrEvent : valueOrEvent?.target?.value;
+    const nextValue = rawValue || "";
+    setMicDeviceId(nextValue);
+    if (nextValue) {
+      setMicMuted(false);
     }
-    setMicDeviceId(rawValue || "");
   }, []);
 
   const toggleMicMute = useCallback(() => {
