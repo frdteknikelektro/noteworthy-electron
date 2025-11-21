@@ -1,17 +1,25 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
 
 import { useApp } from "@/renderer/app-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
+import { Input } from "@/renderer/components/ui/input";
 import { cn } from "@/renderer/lib/utils";
 
 const SOURCE_LABELS = {
   microphone: "Microphone",
-  speaker: "System audio"
+  speaker: "System audio",
+  manual: "Manual context"
+};
+
+const SOURCE_BUBBLE_CLASSES = {
+  microphone: "bg-sidebar-accent/10 text-sidebar-accent-foreground",
+  speaker: "bg-secondary/15 text-secondary-foreground",
+  manual: "bg-primary/10 text-secondary-foreground"
 };
 
 function formatTimestamp(value) {
@@ -47,6 +55,14 @@ export function NoteWorkspace() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [summaryError, setSummaryError] = useState("");
   const [summaryFeedback, setSummaryFeedback] = useState("");
+  const [manualInput, setManualInput] = useState("");
+  const [manualMessages, setManualMessages] = useState([]);
+
+  const createManualMessage = text => ({
+    id: `manual-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    text,
+    timestamp: new Date().toISOString()
+  });
 
   const sortedDraftEntries = useMemo(() => {
     const entries = Object.values(drafts)
@@ -70,6 +86,32 @@ export function NoteWorkspace() {
   const storedSummaries = activeNote?.summaries || [];
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
+  const manualInputLength = manualInput.trim().length;
+
+  const chatMessages = useMemo(() => {
+    const combined = [
+      ...transcriptEntries.map(entry => ({
+        id: entry.id,
+        text: entry.text || "Waiting for audio…",
+        source: entry.source,
+        sourceLabel: SOURCE_LABELS[entry.source] || entry.source,
+        statusLabel: entry.statusLabel,
+        timestamp: entry.timestamp,
+        isManual: false
+      })),
+      ...manualMessages.map(message => ({
+        id: message.id,
+        text: message.text,
+        timestamp: message.timestamp,
+        source: "manual",
+        sourceLabel: SOURCE_LABELS.manual,
+        statusLabel: null,
+        isManual: true
+      }))
+    ];
+
+    return combined.sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+  }, [manualMessages, transcriptEntries]);
 
   useLayoutEffect(() => {
     const titleElement = titleRef.current;
@@ -90,6 +132,10 @@ export function NoteWorkspace() {
       titleElement.textContent = noteTitle;
     }
   }, [activeNote?.id, activeNote?.title]);
+
+  useEffect(() => {
+    setManualMessages([]);
+  }, [activeNote?.id]);
 
   const handleGenerateSummary = async () => {
     if (!canGenerateSummary || isGenerating || !activeNote?.id) return;
@@ -163,7 +209,7 @@ export function NoteWorkspace() {
     void startCapture();
   }, [isCapturing, startCapture, stopCapture]);
 
-  const showPlaceholder = transcriptEntries.length === 0;
+  const showPlaceholder = chatMessages.length === 0;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -248,33 +294,71 @@ export function NoteWorkspace() {
               </div>
             </div>
 
-            <div ref={transcriptsRef} className="space-y-3">
-              {showPlaceholder ? (
-                <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
-                  Start capture to see live transcription entries.
-                </div>
-              ) : (
-                transcriptEntries.map(entry => (
-                  <article
-                    key={entry.id}
+            <div className="flex flex-col gap-2">
+              <form
+                onSubmit={event => {
+                  event.preventDefault();
+                  const trimmed = manualInput.trim();
+                  if (trimmed.length === 0) return;
+                  setManualMessages(prev => [...prev, createManualMessage(trimmed)]);
+                  setManualInput("");
+                }}
+                className="relative w-full"
+              >
+                <Input
+                  id="manual-context"
+                  placeholder="Type manual context..."
+                  className="flex-1 pr-12"
+                  autoComplete="off"
+                  value={manualInput}
+                  onChange={event => setManualInput(event.target.value)}
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-full border border-border/60 bg-muted/70 p-1"
+                  disabled={manualInputLength === 0}
+                >
+                  <ArrowDown className="h-3 w-3" />
+                  <span className="sr-only">Send manual context</span>
+                </Button>
+              </form>
+
+              <div
+                ref={transcriptsRef}
+                className="flex flex-1 flex-col gap-4 overflow-y-auto"
+              >
+                {showPlaceholder ? (
+                  <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
+                    Start capture to see live transcription entries or add manual context above.
+                  </div>
+                ) : (
+                chatMessages.map(message => (
+                  <div
+                    key={message.id}
                     className={cn(
-                      "space-y-2 rounded-xl border border-border bg-background/80 p-4",
-                      "shadow-sm"
+                      "flex flex-col gap-2 text-xs",
+                      message.isManual ? "items-end" : "items-start"
                     )}
                   >
-                    <header className="flex flex-wrap items-center gap-2 text-xs uppercase text-muted-foreground">
-                      <Badge variant={entry.source === "microphone" ? "accent" : "secondary"}>
-                        {SOURCE_LABELS[entry.source] || entry.source}
-                      </Badge>
-                      {entry.statusLabel && <span>{entry.statusLabel}</span>}
-                      <span>{formatTimestamp(entry.timestamp)}</span>
-                    </header>
-                    <p className={cn("text-sm text-foreground", entry.isDraft ? "font-medium text-muted-foreground" : "text-foreground")}>
-                      {entry.text || "Waiting for audio…"}
-                    </p>
-                  </article>
+                    <div
+                      className={cn(
+                        "max-w-[92%] px-4 py-3 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
+                        SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
+                        message.isManual && "ml-auto border-border/40"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                        <span className="text-[11px] tracking-[0.28em] font-semibold">{message.sourceLabel}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="text-[10px] tracking-[0.18em]">{formatTimestamp(message.timestamp)}</span>
+                      </div>
+                      <p className="mt-2 text-inherit">{message.text}</p>
+                    </div>
+                  </div>
                 ))
-              )}
+                )}
+              </div>
             </div>
           </TabsContent>
 
