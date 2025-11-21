@@ -18,6 +18,7 @@ export const DEFAULT_PREFERENCES = {
 };
 
 export const MODEL_OPTIONS = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"];
+export const DEFAULT_MODEL = "gpt-4o-mini-transcribe";
 
 export const STATUS_VARIANTS = {
   microphone: {

@@ -1,19 +1,12 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Circle, CircleDot, Mic2, StopCircle, Square, Volume2 } from "lucide-react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
 
 import { useApp } from "@/renderer/app-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/renderer/components/ui/select";
 import { cn } from "@/renderer/lib/utils";
 
 const SOURCE_LABELS = {
@@ -34,18 +27,6 @@ function compareTimestamps(valueA, valueB) {
   return timestampB.localeCompare(timestampA);
 }
 
-function LedDot({ active, activeClass }) {
-  return (
-    <span
-      className={cn(
-        "absolute -top-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-border/60 transition-colors",
-        active ? activeClass : "bg-muted-foreground/60 border-border/60"
-      )}
-      aria-hidden="true"
-    />
-  );
-}
-
 export function NoteWorkspace() {
   const {
     activeNote,
@@ -53,18 +34,10 @@ export function NoteWorkspace() {
     isCapturing,
     startCapture,
     stopCapture,
-    toggleRecording,
-    isRecording,
-    streamStatus,
     updateNoteTitle,
     generateSummary,
-    micDevices,
-    micDeviceId,
-    handleMicChange,
     micMuted,
-    toggleMicMute,
-    systemAudioEnabled,
-    toggleSystemAudio,
+    toggleMicMute
   } = useApp();
 
   const titleRef = useRef(null);
@@ -92,19 +65,11 @@ export function NoteWorkspace() {
     [sortedDraftEntries, sortedNoteEntries]
   );
 
-  const availableMicDevices = useMemo(
-    () => micDevices.filter(device => Boolean(device.deviceId)),
-    [micDevices]
-  );
-
-  const hasActiveDraft = sortedDraftEntries.length > 0;
-
   const updatedTimestamp = useMemo(() => formatTimestamp(activeNote?.updatedAt), [activeNote?.updatedAt]);
 
   const storedSummaries = activeNote?.summaries || [];
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
-  const isListening = hasActiveDraft;
 
   useLayoutEffect(() => {
     const titleElement = titleRef.current;
@@ -190,9 +155,15 @@ export function NoteWorkspace() {
     }
   };
 
+  const handleRecordToggle = useCallback(() => {
+    if (isCapturing) {
+      stopCapture();
+      return;
+    }
+    void startCapture();
+  }, [isCapturing, startCapture, stopCapture]);
+
   const showPlaceholder = transcriptEntries.length === 0;
-  const micIndicatorActive = isCapturing && streamStatus.microphone && !micMuted;
-  const speakerIndicatorActive = isCapturing && streamStatus.speaker && systemAudioEnabled;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -240,98 +211,40 @@ export function NoteWorkspace() {
             </TabsTrigger>
           </TabsList>
 
+          <div className="h-px w-full bg-border/70" aria-hidden="true" />
+
           <TabsContent value="transcription" className="space-y-6">
             <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-end gap-4">
-                <div className="flex flex-col items-center gap-1">
-                  <Button
-                    size="icon"
-                    variant={isCapturing ? "destructive" : "secondary"}
-                    onClick={isCapturing ? stopCapture : startCapture}
-                    aria-label={isCapturing ? "Stop capture" : "Start capture"}
-                  >
-                    {isCapturing ? <StopCircle className="h-4 w-4" /> : <CircleDot className="h-4 w-4" />}
-                  </Button>
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {isCapturing ? "Capturing" : "Capture"}
-                  </span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <Button
-                    size="icon"
-                    variant={isRecording ? "destructive" : "outline"}
-                    onClick={toggleRecording}
-                    disabled={!isCapturing}
-                    aria-label={isRecording ? "Stop recording" : "Start recording"}
-                  >
-                    {isRecording ? <Square className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
-                  </Button>
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {isRecording ? "Recording" : "Record"}
-                  </span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <Button
-                    size="icon"
-                    variant={micIndicatorActive ? "secondary" : "outline"}
-                    onClick={toggleMicMute}
-                    disabled={!micDeviceId}
-                    className="relative"
-                    aria-label={
-                      micDeviceId
-                        ? micIndicatorActive
-                          ? "Mute microphone"
-                          : "Enable microphone"
-                        : "Select a microphone to activate the mic"
-                    }
-                  >
-                    <Mic2 className="h-4 w-4" />
-                    <LedDot
-                      active={micIndicatorActive}
-                      activeClass="bg-emerald-400 border-emerald-600 shadow-[0_0_0_4px_rgba(16,185,129,0.35)]"
-                    />
-                  </Button>
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Mic</span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <Button
-                    size="icon"
-                    variant={systemAudioEnabled ? "secondary" : "outline"}
-                    onClick={toggleSystemAudio}
-                    className="relative"
-                    aria-label={systemAudioEnabled ? "Disable system audio" : "Enable system audio"}
-                  >
-                    <Volume2 className="h-4 w-4" />
-                    <LedDot
-                      active={speakerIndicatorActive}
-                      activeClass="bg-sky-400 border-sky-600 shadow-[0_0_0_4px_rgba(14,165,233,0.35)]"
-                    />
-                  </Button>
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Speaker</span>
-                </div>
-                <div className="min-w-[200px] max-w-xs flex-1 space-y-1">
-                  <Select value={micDeviceId || ""} onValueChange={handleMicChange}>
-                    <SelectTrigger className="w-full text-sm font-medium">
-                      <SelectValue
-                        placeholder={availableMicDevices.length ? "Select microphone" : "No microphones detected"}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableMicDevices.length === 0 ? (
-                        <SelectItem key="no-mic" value="no-mic" disabled>
-                          No microphones detected
-                        </SelectItem>
-                      ) : (
-                        availableMicDevices.map((device, index) => (
-                          <SelectItem key={device.deviceId} value={device.deviceId}>
-                            {device.label || `Microphone ${index + 1}`}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Select a microphone to turn it on.</p>
-                </div>
+              <div className="flex flex-wrap justify-center items-center gap-3">
+                <Button
+                  variant={isCapturing ? "destructive" : "secondary"}
+                  onClick={handleRecordToggle}
+                  aria-label={isCapturing ? "Stop recording session" : "Start recording session"}
+                  className="flex items-center gap-2 px-4 py-2 text-sm"
+                >
+                  {isCapturing ? (
+                    <StopCircle className="h-4 w-4 text-destructive-foreground" />
+                  ) : (
+                    <CircleDot className="h-4 w-4 text-foreground" />
+                  )}
+                  <span>Record Session</span>
+                </Button>
+
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  disabled={isCapturing}
+                  onClick={toggleMicMute}
+                  aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
+                  className={"transition-colors duration-150 text-foreground"}
+                >
+                  {micMuted ? (
+                    <MicOff className="h-4 w-4 text-foreground" />
+                  ) : (
+                    <Mic className="h-4 w-4 text-foreground" />
+                  )}
+                  <span className="sr-only">Microphone {micMuted ? "muted" : "active"}</span>
+                </Button>
               </div>
             </div>
 

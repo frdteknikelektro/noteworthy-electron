@@ -112,16 +112,19 @@ export class WavRecorder {
 
   async startRecording(microphoneStream, systemAudioStream) {
     if (this.isRecording) return;
-    if (!microphoneStream || !systemAudioStream) {
+    if (!microphoneStream) {
       throw new Error('Start capture before recording backup audio.');
     }
 
     const audioContext = new AudioContext();
     const micSource = audioContext.createMediaStreamSource(microphoneStream);
-    const systemSource = audioContext.createMediaStreamSource(systemAudioStream);
-    const merger = audioContext.createChannelMerger(2);
+    const hasSystemAudio = Boolean(systemAudioStream);
+    const merger = audioContext.createChannelMerger(hasSystemAudio ? 2 : 1);
     micSource.connect(merger, 0, 0);
-    systemSource.connect(merger, 0, 1);
+    if (hasSystemAudio) {
+      const systemSource = audioContext.createMediaStreamSource(systemAudioStream);
+      systemSource.connect(merger, 0, 1);
+    }
     const destination = audioContext.createMediaStreamDestination();
     merger.connect(destination);
 

@@ -13,9 +13,17 @@ import { Session, WavRecorder } from "./lib/audio";
 import {
   NOTES_STORAGE_KEY,
   ACTIVE_NOTE_STORAGE_KEY,
-  SETTINGS_STORAGE_KEY
+  SETTINGS_STORAGE_KEY,
+  MODEL_STORAGE_KEY,
+  MIC_DEVICE_STORAGE_KEY
 } from "./storage-keys";
-import { DEFAULT_PREFERENCES, THEME_MODES, THEME_STORAGE_KEY } from "./settings/constants";
+import {
+  DEFAULT_PREFERENCES,
+  DEFAULT_MODEL,
+  MODEL_OPTIONS,
+  THEME_MODES,
+  THEME_STORAGE_KEY
+} from "./settings/constants";
 
 const AppContext = createContext(null);
 
@@ -114,6 +122,30 @@ function loadPreferencesState() {
   return { ...DEFAULT_PREFERENCES };
 }
 
+function loadStoredModel() {
+  if (typeof window === "undefined") return DEFAULT_MODEL;
+  try {
+    const stored = localStorage.getItem(MODEL_STORAGE_KEY);
+    if (stored && MODEL_OPTIONS.includes(stored)) {
+      return stored;
+    }
+  } catch (error) {
+    console.warn("Unable to load stored model:", error);
+  }
+  return DEFAULT_MODEL;
+}
+
+function loadStoredMicDevice() {
+  if (typeof window === "undefined") return "";
+  try {
+    const stored = localStorage.getItem(MIC_DEVICE_STORAGE_KEY);
+    return stored || "";
+  } catch (error) {
+    console.warn("Unable to read saved microphone:", error);
+  }
+  return "";
+}
+
 function loadStoredThemeMode() {
   if (typeof window === "undefined") return "system";
   try {
@@ -156,8 +188,8 @@ export function AppProvider({ children }) {
   const [activeNoteId, setActiveNoteId] = useState(initial.activeId);
   const [searchTerm, setSearchTerm] = useState("");
   const [preferences, setPreferences] = useState(() => loadPreferencesState());
-  const [model, setModel] = useState("gpt-4o-mini-transcribe");
-  const [micDeviceId, setMicDeviceId] = useState("");
+  const [model, setModel] = useState(() => loadStoredModel());
+  const [micDeviceId, setMicDeviceId] = useState(() => loadStoredMicDevice());
   const [micDevices, setMicDevices] = useState([]);
   const [micMuted, setMicMuted] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -216,6 +248,20 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    localStorage.setItem(MODEL_STORAGE_KEY, model);
+  }, [model]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (micDeviceId) {
+      localStorage.setItem(MIC_DEVICE_STORAGE_KEY, micDeviceId);
+    } else {
+      localStorage.removeItem(MIC_DEVICE_STORAGE_KEY);
+    }
+  }, [micDeviceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const tone = resolveThemeTone(themeMode, systemPrefersDark);
     const root = document.documentElement;
     root.dataset.theme = tone;
@@ -268,6 +314,15 @@ export function AppProvider({ children }) {
     navigator.mediaDevices.addEventListener("devicechange", handler);
     return () => navigator.mediaDevices.removeEventListener("devicechange", handler);
   }, [refreshMicrophones]);
+
+  useEffect(() => {
+    if (isCapturing || micDevices.length === 0) return;
+    if (micDeviceId && micDevices.some(device => device.deviceId === micDeviceId)) return;
+    const firstDeviceId = micDevices.find(device => device.deviceId)?.deviceId;
+    if (firstDeviceId) {
+      setMicDeviceId(firstDeviceId);
+    }
+  }, [isCapturing, micDeviceId, micDevices]);
 
   const appendTranscriptEntry = useCallback(
     ({ source, text }) => {
@@ -523,6 +578,11 @@ export function AppProvider({ children }) {
         systemAudioStreamRef.current = includeSystemAudio ? streams.systemAudio : null;
         const sessionConfig = buildSessionConfig();
         await setupRealtimeSessions(sessionConfig, includeSystemAudio);
+        await wavRecorderRef.current.startRecording(
+          microphoneStreamRef.current,
+          systemAudioStreamRef.current
+        );
+        setIsRecording(true);
         updateStatus("microphone", true);
         updateStatus("speaker", includeSystemAudio);
       } catch (error) {

@@ -33,7 +33,10 @@ export default function SettingsModal() {
     settingsOpen,
     setSettingsOpen,
     handleModelChange,
-    handleLanguageChange
+    handleLanguageChange,
+    micDevices,
+    micDeviceId,
+    handleMicChange
   } = useApp();
 
   const inputDisabled = isCapturing;
@@ -44,7 +47,7 @@ export default function SettingsModal() {
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
       <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Realtime capture settings</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
             Choose your provider, model, and default transcription language for live capture.
           </DialogDescription>
@@ -88,6 +91,38 @@ export default function SettingsModal() {
               </FieldContent>
             </Field>
           </div>
+
+          <Field>
+            <FieldLabel htmlFor="microphone">Microphone</FieldLabel>
+            <FieldContent>
+              <Select
+                id="microphone"
+                value={micDeviceId || ""}
+                onValueChange={handleMicChange}
+                disabled={isCapturing}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={micDevices.length ? "Select microphone" : "No microphones detected"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {micDevices.length === 0 ? (
+                    <SelectItem key="no-mic" value="" disabled>
+                      No microphones detected
+                    </SelectItem>
+                  ) : (
+                    micDevices.map((device, index) => (
+                      <SelectItem key={device.deviceId || `mic-${index}`} value={device.deviceId}>
+                        {device.label || `Microphone ${index + 1}`}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </FieldContent>
+            <FieldDescription>
+              Choose which microphone should be captured during the next session; changing it restarts the stream automatically.
+            </FieldDescription>
+          </Field>
 
           <Field>
             <FieldLabel htmlFor="language">Default transcription language</FieldLabel>
