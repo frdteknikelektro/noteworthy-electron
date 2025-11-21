@@ -249,9 +249,6 @@ export function NoteWorkspace() {
             </div>
 
             <div ref={transcriptsRef} className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Showing every transcript entry, newest first.
-              </p>
               {showPlaceholder ? (
                 <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
                   Start capture to see live transcription entries.
