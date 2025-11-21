@@ -15,7 +15,6 @@ export const LANGUAGE_LABELS = {
 export const DEFAULT_PREFERENCES = {
   language: "id",
   prompt: "",
-  silenceSeconds: 5
 };
 
 export const MODEL_OPTIONS = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"];

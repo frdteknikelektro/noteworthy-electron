@@ -7,7 +7,6 @@ import {
   DialogDescription,
   DialogContent
 } from "@/renderer/components/ui/dialog";
-import { Input } from "@/renderer/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -34,8 +33,7 @@ export default function SettingsModal() {
     settingsOpen,
     setSettingsOpen,
     handleModelChange,
-    handleLanguageChange,
-    handleSilenceChange
+    handleLanguageChange
   } = useApp();
 
   const inputDisabled = isCapturing;
@@ -48,7 +46,7 @@ export default function SettingsModal() {
         <DialogHeader>
           <DialogTitle>Realtime capture settings</DialogTitle>
           <DialogDescription>
-            Choose your provider, model, default transcription language, and idle detection threshold for live capture.
+            Choose your provider, model, and default transcription language for live capture.
           </DialogDescription>
         </DialogHeader>
 
@@ -91,46 +89,28 @@ export default function SettingsModal() {
             </Field>
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="language">Default transcription language</FieldLabel>
-              <FieldContent>
-                <Select
-                  id="language"
-                  value={preferences.language}
-                  onValueChange={handleLanguageSelect}
-                  disabled={inputDisabled}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
-                      <SelectItem key={code} value={code}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="idle">Idle detection (seconds)</FieldLabel>
-              <FieldContent>
-                <Input
-                  id="idle"
-                  type="number"
-                  min="1"
-                  max="30"
-                  step="0.5"
-                  inputMode="decimal"
-                  value={preferences.silenceSeconds}
-                  onChange={handleSilenceChange}
-                  disabled={inputDisabled}
-                />
-              </FieldContent>
-            </Field>
-          </div>
+          <Field>
+            <FieldLabel htmlFor="language">Default transcription language</FieldLabel>
+            <FieldContent>
+              <Select
+                id="language"
+                value={preferences.language}
+                onValueChange={handleLanguageSelect}
+                disabled={inputDisabled}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+                    <SelectItem key={code} value={code}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
         </div>
 
       </DialogContent>

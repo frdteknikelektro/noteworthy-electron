@@ -91,14 +91,6 @@ const STREAM_META = {
   system_audio: { statusId: "speaker", messageSource: "speaker", errorLabel: "system audio" }
 };
 
-function sanitizeSilenceSeconds(value) {
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) {
-    return DEFAULT_PREFERENCES.silenceSeconds;
-  }
-  return Math.min(30, Math.max(1, Number(numeric.toFixed(2))));
-}
-
 function loadPreferencesState() {
   if (typeof window === "undefined") {
     return { ...DEFAULT_PREFERENCES };
@@ -108,11 +100,12 @@ function loadPreferencesState() {
     const storedRaw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (storedRaw) {
       const parsed = JSON.parse(storedRaw);
-      return {
-        ...DEFAULT_PREFERENCES,
-        ...parsed,
-        silenceSeconds: sanitizeSilenceSeconds(parsed?.silenceSeconds ?? DEFAULT_PREFERENCES.silenceSeconds)
-      };
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return {
+          ...DEFAULT_PREFERENCES,
+          ...parsed
+        };
+      }
     }
   } catch (error) {
     console.warn("Failed to load preferences:", error);
@@ -486,7 +479,6 @@ export function AppProvider({ children }) {
   const buildSessionConfig = useCallback(() => {
     const transcription = {
       model,
-      prompt: preferences.prompt?.trim(),
       language: preferences.language
     };
     const config = {
@@ -494,13 +486,9 @@ export function AppProvider({ children }) {
         model: transcription.model
       },
       turn_detection: {
-        type: "server_vad",
-        silence_duration_ms: Math.round(preferences.silenceSeconds * 1000)
+        type: "server_vad"
       }
     };
-    if (transcription.prompt) {
-      config.input_audio_transcription.prompt = transcription.prompt;
-    }
     if (transcription.language) {
       config.input_audio_transcription.language = transcription.language;
     }
@@ -586,15 +574,6 @@ export function AppProvider({ children }) {
   const handleLanguageChange = useCallback(event => {
     const next = event.target.value || DEFAULT_PREFERENCES.language;
     setPreferences(prev => ({ ...prev, language: next }));
-  }, []);
-
-  const handlePromptChange = useCallback(event => {
-    setPreferences(prev => ({ ...prev, prompt: event.target.value }));
-  }, []);
-
-  const handleSilenceChange = useCallback(event => {
-    const sanitized = sanitizeSilenceSeconds(event.target.value);
-    setPreferences(prev => ({ ...prev, silenceSeconds: sanitized }));
   }, []);
 
   const handleModelChange = useCallback(event => {
@@ -807,8 +786,6 @@ export function AppProvider({ children }) {
       deleteNote,
       preferences,
       handleLanguageChange,
-      handlePromptChange,
-      handleSilenceChange,
       model,
       handleModelChange,
       micDeviceId,
@@ -850,8 +827,6 @@ export function AppProvider({ children }) {
       deleteNote,
       preferences,
       handleLanguageChange,
-      handlePromptChange,
-      handleSilenceChange,
       model,
       handleModelChange,
       micDeviceId,
