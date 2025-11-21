@@ -229,13 +229,14 @@ export function NoteWorkspace() {
         <Tabs defaultValue="transcription" className="space-y-4">
           <TabsList>
             <TabsTrigger value="transcription">Transcription</TabsTrigger>
-            <TabsTrigger value="summary">
-              <div className="flex items-center gap-2">
-                Summary
-                <Badge variant="secondary" className="text-xs font-semibold uppercase">
-                  {storedSummaries.length}
-                </Badge>
-              </div>
+            <TabsTrigger value="summary" className="gap-1">
+              Summary{" "}
+              <Badge
+                variant="secondary"
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/30"
+              >
+                {storedSummaries.length}
+              </Badge>
             </TabsTrigger>
           </TabsList>
 
