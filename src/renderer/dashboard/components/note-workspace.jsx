@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
 
 import { useApp } from "@/renderer/app-provider";
@@ -45,7 +45,8 @@ export function NoteWorkspace() {
     updateNoteTitle,
     generateSummary,
     micMuted,
-    toggleMicMute
+    toggleMicMute,
+    addManualEntry
   } = useApp();
 
   const titleRef = useRef(null);
@@ -56,13 +57,6 @@ export function NoteWorkspace() {
   const [summaryError, setSummaryError] = useState("");
   const [summaryFeedback, setSummaryFeedback] = useState("");
   const [manualInput, setManualInput] = useState("");
-  const [manualMessages, setManualMessages] = useState([]);
-
-  const createManualMessage = text => ({
-    id: `manual-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-    text,
-    timestamp: new Date().toISOString()
-  });
 
   const sortedDraftEntries = useMemo(() => {
     const entries = Object.values(drafts)
@@ -88,30 +82,21 @@ export function NoteWorkspace() {
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
   const manualInputLength = manualInput.trim().length;
 
-  const chatMessages = useMemo(() => {
-    const combined = [
-      ...transcriptEntries.map(entry => ({
-        id: entry.id,
-        text: entry.text || "Waiting for audio…",
-        source: entry.source,
-        sourceLabel: SOURCE_LABELS[entry.source] || entry.source,
-        statusLabel: entry.statusLabel,
-        timestamp: entry.timestamp,
-        isManual: false
-      })),
-      ...manualMessages.map(message => ({
-        id: message.id,
-        text: message.text,
-        timestamp: message.timestamp,
-        source: "manual",
-        sourceLabel: SOURCE_LABELS.manual,
-        statusLabel: null,
-        isManual: true
-      }))
-    ];
-
-    return combined.sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
-  }, [manualMessages, transcriptEntries]);
+  const chatMessages = useMemo(
+    () =>
+      transcriptEntries
+        .map(entry => ({
+          id: entry.id,
+          text: entry.text || "Waiting for audio…",
+          source: entry.source,
+          sourceLabel: SOURCE_LABELS[entry.source] || entry.source,
+          statusLabel: entry.statusLabel,
+          timestamp: entry.timestamp,
+          isManual: entry.source === "manual"
+        }))
+        .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")),
+    [transcriptEntries]
+  );
 
   useLayoutEffect(() => {
     const titleElement = titleRef.current;
@@ -132,10 +117,6 @@ export function NoteWorkspace() {
       titleElement.textContent = noteTitle;
     }
   }, [activeNote?.id, activeNote?.title]);
-
-  useEffect(() => {
-    setManualMessages([]);
-  }, [activeNote?.id]);
 
   const handleGenerateSummary = async () => {
     if (!canGenerateSummary || isGenerating || !activeNote?.id) return;
@@ -300,7 +281,7 @@ export function NoteWorkspace() {
                   event.preventDefault();
                   const trimmed = manualInput.trim();
                   if (trimmed.length === 0) return;
-                  setManualMessages(prev => [...prev, createManualMessage(trimmed)]);
+                  addManualEntry(trimmed);
                   setManualInput("");
                 }}
                 className="relative w-full"
