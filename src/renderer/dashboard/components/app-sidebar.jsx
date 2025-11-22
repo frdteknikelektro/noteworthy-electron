@@ -19,9 +19,11 @@ import {
   DropdownMenuItem,
 } from "@/renderer/components/ui/dropdown-menu";
 import { useApp } from "@/renderer/app-provider";
+import { useAudio } from "@/renderer/audio-provider";
 
 export function AppSidebar({ variant = "sidebar", className, ...props }) {
-  const { filteredNotes, activeNoteId, selectNote, createNote, openSettings, deleteNote, isCapturing } = useApp();
+  const { filteredNotes, activeNoteId, selectNote, createNote, openSettings, deleteNote } = useApp();
+  const { isCapturing } = useAudio();
 
   const handleDeleteNote = note => {
     if (!note?.id) return;
@@ -29,6 +31,14 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
     const confirmed = window.confirm(`Delete "${name}" and all associated transcript content? This cannot be undone.`);
     if (!confirmed) return;
     deleteNote(note.id);
+  };
+
+  const handleSelectNote = noteId => {
+    if (isCapturing) {
+      alert("Stop capture before switching notes.");
+      return;
+    }
+    selectNote(noteId);
   };
 
   const hasNotes = filteredNotes.length > 0;
@@ -64,7 +74,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
                 <SidebarMenuButton
                   type="button"
                   isActive={note.id === activeNoteId}
-                  onClick={() => selectNote(note.id)}
+                  onClick={() => handleSelectNote(note.id)}
                   className="px-3 py-2 text-sm font-medium pr-10"
                 >
                   <span className="truncate">{note.title || "Untitled note"}</span>

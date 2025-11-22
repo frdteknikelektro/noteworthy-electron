@@ -21,6 +21,7 @@ import {
   FieldLabel
 } from "@/renderer/components/ui/field";
 import { useApp } from "@/renderer/app-provider";
+import { useAudio } from "@/renderer/audio-provider";
 import { LANGUAGE_LABELS, MODEL_OPTIONS } from "@/renderer/settings/constants";
 
 const PROVIDER_OPTIONS = [{ value: "openai", label: "OpenAI" }];
@@ -28,16 +29,13 @@ const PROVIDER_OPTIONS = [{ value: "openai", label: "OpenAI" }];
 export default function SettingsModal() {
   const {
     preferences,
-    isCapturing,
     model,
     settingsOpen,
     setSettingsOpen,
     handleModelChange,
-    handleLanguageChange,
-    micDevices,
-    micDeviceId,
-    handleMicChange
+    handleLanguageChange
   } = useApp();
+  const { isCapturing, micDevices, micDeviceId, handleMicChange } = useAudio();
 
   const inputDisabled = isCapturing;
   const handleModelSelect = value => handleModelChange({ target: { value } });

@@ -4,11 +4,13 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {ArrowDown, ArrowUp, CircleDot, Mic, MicOff, StopCircle} from "lucide-react";
 
 import { useApp } from "@/renderer/app-provider";
+import { useAudio } from "@/renderer/audio-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
 import { Input } from "@/renderer/components/ui/input";
 import { cn } from "@/renderer/lib/utils";
+import { buildTranscriptSnippet } from "@/renderer/lib/transcript";
 
 const SOURCE_LABELS = {
   microphone: "Microphone",
@@ -30,18 +32,8 @@ function formatTimestamp(value) {
 }
 
 export function NoteWorkspace() {
-  const {
-    activeNote,
-    drafts,
-    isCapturing,
-    startCapture,
-    stopCapture,
-    updateNoteTitle,
-    generateSummary,
-    micMuted,
-    toggleMicMute,
-    addManualEntry
-  } = useApp();
+  const { activeNote, updateNoteTitle, generateSummary, addManualEntry } = useApp();
+  const { drafts, isCapturing, startCapture, stopCapture, micMuted, toggleMicMute } = useAudio();
 
   const titleRef = useRef(null);
   const previousNoteIdRef = useRef(null);
@@ -122,7 +114,8 @@ export function NoteWorkspace() {
     setSummaryFeedback("");
 
     try {
-      await generateSummary(activeNote.id, summaryPrompt);
+      const snippet = buildTranscriptSnippet(activeNote, drafts);
+      await generateSummary(activeNote.id, summaryPrompt, snippet);
       setSummaryPrompt("");
     } catch (error) {
       console.error(error);
