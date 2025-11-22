@@ -192,7 +192,7 @@ export function NoteWorkspace() {
 
   const showPlaceholder = chatMessages.length === 0;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 h-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2 flex-1">
           <div
@@ -223,9 +223,9 @@ export function NoteWorkspace() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4">
-        <Tabs defaultValue="transcription" className="space-y-4">
-          <TabsList>
+      <div className="flex flex-1 flex-col gap-4 min-h-0">
+        <Tabs defaultValue="transcription" className="flex flex-1 flex-col min-h-0">
+          <TabsList className="self-start">
             <TabsTrigger value="transcription">Transcription</TabsTrigger>
             <TabsTrigger value="summary" className="gap-1">
               Summary{" "}
@@ -238,44 +238,10 @@ export function NoteWorkspace() {
             </TabsTrigger>
           </TabsList>
 
-          <div className="h-px w-full bg-border/70" aria-hidden="true" />
+          <div className="h-px w-full bg-border/70 mt-4" aria-hidden="true" />
 
-          <TabsContent value="transcription" className="space-y-6">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap justify-center items-center gap-3">
-                <Button
-                  variant={isCapturing ? "destructive" : "secondary"}
-                  onClick={handleRecordToggle}
-                  aria-label={isCapturing ? "Stop recording session" : "Start recording session"}
-                  className="flex items-center gap-2 px-4 py-2 text-sm"
-                >
-                  {isCapturing ? (
-                    <StopCircle className="h-4 w-4 text-destructive-foreground" />
-                  ) : (
-                    <CircleDot className="h-4 w-4 text-foreground" />
-                  )}
-                  <span>Record Session</span>
-                </Button>
-
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  disabled={isCapturing}
-                  onClick={toggleMicMute}
-                  aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
-                  className={"transition-colors duration-150 text-foreground"}
-                >
-                  {micMuted ? (
-                    <MicOff className="h-4 w-4 text-foreground" />
-                  ) : (
-                    <Mic className="h-4 w-4 text-foreground" />
-                  )}
-                  <span className="sr-only">Microphone {micMuted ? "muted" : "active"}</span>
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
+          <TabsContent value="transcription" className="flex flex-1 flex-col gap-6 pb-0 mt-0 overflow-hidden">
+            <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-hidden">
               <form
                 onSubmit={event => {
                   event.preventDefault();
@@ -307,7 +273,7 @@ export function NoteWorkspace() {
 
               <div
                 ref={transcriptsRef}
-                className="flex flex-1 flex-col gap-4 overflow-y-auto"
+                className="flex flex-1 min-h-0 flex-col gap-4 pb-16 overflow-y-auto"
               >
                 {showPlaceholder ? (
                   <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
@@ -341,60 +307,94 @@ export function NoteWorkspace() {
                 )}
               </div>
             </div>
+            <div className="flex flex-col gap-3 absolute bottom-4 left-0 right-0">
+              <div className="flex flex-wrap justify-center items-center gap-3">
+                <Button
+                  variant={isCapturing ? "destructive" : "secondary"}
+                  onClick={handleRecordToggle}
+                  aria-label={isCapturing ? "Stop recording session" : "Start recording session"}
+                  className="flex items-center gap-2 px-4 py-2 text-sm"
+                >
+                  {isCapturing ? (
+                    <StopCircle className="h-4 w-4 text-destructive-foreground" />
+                  ) : (
+                    <CircleDot className="h-4 w-4 text-foreground" />
+                  )}
+                  <span>Record Session</span>
+                </Button>
+
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  disabled={isCapturing}
+                  onClick={toggleMicMute}
+                  aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
+                  className={"transition-colors duration-150 text-foreground"}
+                >
+                  {micMuted ? (
+                    <MicOff className="h-4 w-4 text-foreground" />
+                  ) : (
+                    <Mic className="h-4 w-4 text-foreground" />
+                  )}
+                  <span className="sr-only">Microphone {micMuted ? "muted" : "active"}</span>
+                </Button>
+              </div>
+            </div>
           </TabsContent>
 
-          <TabsContent value="summary" className="space-y-5">
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase text-muted-foreground">Summary prompt</div>
-              <textarea
-                value={summaryPrompt}
-                onChange={event => setSummaryPrompt(event.target.value)}
-                placeholder="E.g., highlight key decisions, action items, or next steps."
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                rows={4}
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={handleGenerateSummary} disabled={!canGenerateSummary || isGenerating}>
-                {isGenerating ? "Generating…" : "Generate summary"}
-              </Button>
-              <Badge variant="accent">{storedSummaries.length} document{storedSummaries.length === 1 ? "" : "s"}</Badge>
-            </div>
-            {summaryError && (
-              <p className="text-xs text-destructive">{summaryError}</p>
-            )}
-            {summaryFeedback && (
-              <p className="text-xs text-foreground">{summaryFeedback}</p>
-            )}
-
-            <div className="space-y-3">
-              {storedSummaries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Summaries based on the transcript will show up here.
-                </p>
-              ) : (
-                storedSummaries.map((entry, index) => (
-                  <article
-                    key={entry.id}
-                    className="space-y-2 rounded-xl border border-border bg-background/80 p-4 shadow-sm"
-                  >
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase text-muted-foreground">
-                      <span>{formatTimestamp(entry.createdAt)}</span>
-                      <Badge variant="secondary">Doc {storedSummaries.length - index}</Badge>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">{entry.prompt}</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleCopySummary(entry)}>
-                        Copy
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDownloadSummary(entry)}>
-                        Download
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground whitespace-pre-line">{entry.body}</p>
-                  </article>
-                ))
+          <TabsContent value="summary" className="flex flex-1 flex-col gap-5 mt-0 overflow-hidden">
+            <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-1 py-4">
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Summary prompt</div>
+                <textarea
+                  value={summaryPrompt}
+                  onChange={event => setSummaryPrompt(event.target.value)}
+                  placeholder="E.g., highlight key decisions, action items, or next steps."
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  rows={4}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={handleGenerateSummary} disabled={!canGenerateSummary || isGenerating}>
+                  {isGenerating ? "Generating…" : "Generate summary"}
+                </Button>
+                <Badge variant="accent">{storedSummaries.length} document{storedSummaries.length === 1 ? "" : "s"}</Badge>
+              </div>
+              {summaryError && (
+                <p className="text-xs text-destructive">{summaryError}</p>
               )}
+              {summaryFeedback && (
+                <p className="text-xs text-foreground">{summaryFeedback}</p>
+              )}
+              <div className="space-y-3">
+                {storedSummaries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Summaries based on the transcript will show up here.
+                  </p>
+                ) : (
+                  storedSummaries.map((entry, index) => (
+                    <article
+                      key={entry.id}
+                      className="space-y-2 rounded-xl border border-border bg-background/80 p-4 shadow-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase text-muted-foreground">
+                        <span>{formatTimestamp(entry.createdAt)}</span>
+                        <Badge variant="secondary">Doc {storedSummaries.length - index}</Badge>
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">{entry.prompt}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleCopySummary(entry)}>
+                          Copy
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDownloadSummary(entry)}>
+                          Download
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground whitespace-pre-line">{entry.body}</p>
+                    </article>
+                  ))
+                )}
+              </div>
             </div>
           </TabsContent>
         </Tabs>
