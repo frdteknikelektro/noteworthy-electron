@@ -368,35 +368,6 @@ export function AppProvider({ children }) {
     [appendTranscriptEntry]
   );
 
-  const beginDraft = useCallback((source, initialText, statusLabel) => {
-    setDrafts(prev => ({
-      ...prev,
-      [source]: {
-        id: generateId("draft"),
-        source,
-        text: initialText,
-        timestamp: new Date().toISOString(),
-        statusLabel
-      }
-    }));
-  }, []);
-
-  const updateDraft = useCallback((source, text, statusLabel) => {
-    setDrafts(prev => {
-      const current = prev[source];
-      if (!current) return prev;
-      return {
-        ...prev,
-        [source]: {
-          ...current,
-          text,
-          timestamp: new Date().toISOString(),
-          statusLabel
-        }
-      };
-    });
-  }, []);
-
   const finalizeDraft = useCallback(
     (source, text) => {
       setDrafts(prev => ({ ...prev, [source]: null }));
@@ -411,12 +382,6 @@ export function AppProvider({ children }) {
         case "transcription_session.created":
           console.log(`${source} session created:`, message.session?.id);
           break;
-        case "input_audio_buffer.speech_started":
-          beginDraft(source, "Listening…", "Listening…");
-          break;
-        case "input_audio_buffer.speech_stopped":
-          updateDraft(source, "Processing…", "Processing…");
-          break;
         case "conversation.item.input_audio_transcription.completed":
           finalizeDraft(source, message.transcript || "");
           break;
@@ -424,7 +389,7 @@ export function AppProvider({ children }) {
           break;
       }
     },
-    [beginDraft, finalizeDraft, updateDraft]
+    [finalizeDraft]
   );
 
   const updateStatus = useCallback((statusId, connected) => {

@@ -89,6 +89,13 @@ export function NoteWorkspace() {
   );
 
   useLayoutEffect(() => {
+    const transcriptsElement = transcriptsRef.current;
+    if (!transcriptsElement) return;
+
+    transcriptsElement.scrollTop = transcriptsElement.scrollHeight;
+  }, [chatMessages.length]);
+
+  useLayoutEffect(() => {
     const titleElement = titleRef.current;
     if (!titleElement) return;
 
@@ -267,47 +274,49 @@ export function NoteWorkspace() {
                         </div>
                       </div>
                     )),
-                    isCapturing ? <div className="flex flex-col gap-2 text-xs items-end">
-                      <div
-                        className={cn(
-                          "max-w-[60%] w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground",
-                          SOURCE_BUBBLE_CLASSES.manual,
-                          "ml-auto border-border/40"
-                        )}
-                      >
-                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                          <span className="text-[11px] tracking-[0.28em] font-semibold">Manual Context</span>
-                        </div>
-                        <form
-                          className="mt-2 flex items-center gap-2"
-                          onSubmit={event => {
-                            event.preventDefault();
-                            const trimmed = manualInput.trim();
-                            if (trimmed.length === 0) return;
-                            addManualEntry(trimmed);
-                            setManualInput("");
-                          }}
+                    isCapturing && chatMessages.length > 0 ? (
+                      <div key="manual-context-form" className="flex flex-col gap-2 text-xs items-end">
+                        <div
+                          className={cn(
+                            "max-w-[60%] w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground",
+                            SOURCE_BUBBLE_CLASSES.manual,
+                            "ml-auto border-border/40"
+                          )}
                         >
-                          <Input
-                            placeholder="Type manual context..."
-                            className="flex-1 border-0 bg-transparent shadow-none px-0 py-0 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-0"
-                            autoComplete="off"
-                            value={manualInput}
-                            onChange={event => setManualInput(event.target.value)}
-                          />
-                          <Button
-                            type="submit"
-                            size="icon"
-                            variant="ghost"
-                            className="rounded-full border border-border/50 bg-muted/70 p-1"
-                            disabled={manualInputLength === 0}
+                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                            <span className="text-[11px] tracking-[0.28em] font-semibold">Manual Context</span>
+                          </div>
+                          <form
+                            className="mt-2 flex items-center gap-2"
+                            onSubmit={event => {
+                              event.preventDefault();
+                              const trimmed = manualInput.trim();
+                              if (trimmed.length === 0) return;
+                              addManualEntry(trimmed);
+                              setManualInput("");
+                            }}
                           >
-                            <ArrowUp className="h-3 w-3" />
-                            <span className="sr-only">Send manual context</span>
-                          </Button>
-                        </form>
+                            <Input
+                              placeholder="Type manual context..."
+                              className="flex-1 border-0 bg-transparent shadow-none px-0 py-0 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-0"
+                              autoComplete="off"
+                              value={manualInput}
+                              onChange={event => setManualInput(event.target.value)}
+                            />
+                            <Button
+                              type="submit"
+                              size="icon"
+                              variant="ghost"
+                              className="rounded-full border border-border/50 bg-muted/70 p-1"
+                              disabled={manualInputLength === 0}
+                            >
+                              <ArrowUp className="h-3 w-3" />
+                              <span className="sr-only">Send manual context</span>
+                            </Button>
+                          </form>
+                        </div>
                       </div>
-                    </div> : null
+                    ) : null
                   ]}
                 </div>
               </div>
