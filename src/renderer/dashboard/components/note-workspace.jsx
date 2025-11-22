@@ -340,7 +340,6 @@ export function NoteWorkspace() {
                 <Button
                   size="icon"
                   variant="secondary"
-                  disabled={isCapturing}
                   onClick={toggleMicMute}
                   aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
                   className={"transition-colors duration-150 text-foreground"}
