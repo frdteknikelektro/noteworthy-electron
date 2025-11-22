@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
+import {ArrowDown, ArrowUp, CircleDot, Mic, MicOff, StopCircle} from "lucide-react";
 
 import { useApp } from "@/renderer/app-provider";
 import { Badge } from "@/renderer/components/ui/badge";
@@ -29,12 +29,6 @@ function formatTimestamp(value) {
   return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function compareTimestamps(valueA, valueB) {
-  const timestampA = valueA || "";
-  const timestampB = valueB || "";
-  return timestampB.localeCompare(timestampA);
-}
-
 export function NoteWorkspace() {
   const {
     activeNote,
@@ -58,21 +52,19 @@ export function NoteWorkspace() {
   const [summaryFeedback, setSummaryFeedback] = useState("");
   const [manualInput, setManualInput] = useState("");
 
-  const sortedDraftEntries = useMemo(() => {
-    const entries = Object.values(drafts)
+  const draftEntries = useMemo(() => {
+    return Object.values(drafts)
       .filter(Boolean)
       .map(draft => ({ ...draft, isDraft: true }));
-    return entries.sort((a, b) => compareTimestamps(a.timestamp, b.timestamp));
   }, [drafts]);
 
-  const sortedNoteEntries = useMemo(() => {
-    const entries = [...(activeNote?.transcript || [])];
-    return entries.sort((a, b) => compareTimestamps(a.timestamp, b.timestamp));
+  const noteEntries = useMemo(() => {
+    return [...(activeNote?.transcript || [])];
   }, [activeNote?.transcript]);
 
   const transcriptEntries = useMemo(
-    () => [...sortedDraftEntries, ...sortedNoteEntries],
-    [sortedDraftEntries, sortedNoteEntries]
+    () => [...draftEntries, ...noteEntries],
+    [draftEntries, noteEntries]
   );
 
   const updatedTimestamp = useMemo(() => formatTimestamp(activeNote?.updatedAt), [activeNote?.updatedAt]);
@@ -84,17 +76,15 @@ export function NoteWorkspace() {
 
   const chatMessages = useMemo(
     () =>
-      transcriptEntries
-        .map(entry => ({
-          id: entry.id,
-          text: entry.text || "Waiting for audio…",
-          source: entry.source,
-          sourceLabel: SOURCE_LABELS[entry.source] || entry.source,
-          statusLabel: entry.statusLabel,
-          timestamp: entry.timestamp,
-          isManual: entry.source === "manual"
-        }))
-        .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")),
+      transcriptEntries.map(entry => ({
+        id: entry.id,
+        text: entry.text || "Waiting for audio…",
+        source: entry.source,
+        sourceLabel: SOURCE_LABELS[entry.source] || entry.source,
+        statusLabel: entry.statusLabel,
+        timestamp: entry.timestamp,
+        isManual: entry.source === "manual"
+      })),
     [transcriptEntries]
   );
 
@@ -242,69 +232,84 @@ export function NoteWorkspace() {
 
           <TabsContent value="transcription" className="flex flex-1 flex-col gap-6 pb-0 mt-0 overflow-hidden">
             <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-hidden">
-              <form
-                onSubmit={event => {
-                  event.preventDefault();
-                  const trimmed = manualInput.trim();
-                  if (trimmed.length === 0) return;
-                  addManualEntry(trimmed);
-                  setManualInput("");
-                }}
-                className="relative w-full"
-              >
-                <Input
-                  id="manual-context"
-                  placeholder="Type manual context..."
-                  className="flex-1 pr-12"
-                  autoComplete="off"
-                  value={manualInput}
-                  onChange={event => setManualInput(event.target.value)}
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-full border border-border/60 bg-muted/70 p-1"
-                  disabled={manualInputLength === 0}
+              <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-hidden">
+                <div
+                  ref={transcriptsRef}
+                  className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pt-3 pb-16"
                 >
-                  <ArrowDown className="h-3 w-3" />
-                  <span className="sr-only">Send manual context</span>
-                </Button>
-              </form>
-
-              <div
-                ref={transcriptsRef}
-                className="flex flex-1 min-h-0 flex-col gap-4 pb-16 overflow-y-auto"
-              >
-                {showPlaceholder ? (
-                  <div className="rounded-xl border border-dashed border-border/50 bg-background/80 p-5 text-sm text-muted-foreground">
-                    Start capture to see live transcription entries or add manual context above.
-                  </div>
-                ) : (
-                chatMessages.map(message => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      "flex flex-col gap-2 text-xs",
-                      message.isManual ? "items-end" : "items-start"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "max-w-[92%] px-4 py-3 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
-                        SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
-                        message.isManual && "ml-auto border-border/40"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                        <span className="text-[11px] tracking-[0.28em] font-semibold">{message.sourceLabel}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="text-[10px] tracking-[0.18em]">{formatTimestamp(message.timestamp)}</span>
-                      </div>
-                      <p className="mt-2 text-inherit">{message.text}</p>
+                  {showPlaceholder && (
+                    <div className="bg-background/80 p-5 text-center text-sm text-muted-foreground">
+                      Start capture to see live transcription entries.
                     </div>
-                  </div>
-                ))
-                )}
+                  )}
+                  {[
+                    ...chatMessages.map(message => (
+                      <div
+                        key={message.id}
+                        className={cn(
+                          "flex flex-col gap-2 text-xs",
+                          message.isManual ? "items-end" : "items-start"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "max-w-[92%] px-4 py-3 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
+                            SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
+                            message.isManual && "ml-auto border-border/40"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                            <span className="text-[11px] tracking-[0.28em] font-semibold">{message.sourceLabel}</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="text-[10px] tracking-[0.18em]">{formatTimestamp(message.timestamp)}</span>
+                          </div>
+                          <p className="mt-2 text-inherit">{message.text}</p>
+                        </div>
+                      </div>
+                    )),
+                    isCapturing ? <div className="flex flex-col gap-2 text-xs items-end">
+                      <div
+                        className={cn(
+                          "max-w-[60%] w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground",
+                          SOURCE_BUBBLE_CLASSES.manual,
+                          "ml-auto border-border/40"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                          <span className="text-[11px] tracking-[0.28em] font-semibold">Manual Context</span>
+                        </div>
+                        <form
+                          className="mt-2 flex items-center gap-2"
+                          onSubmit={event => {
+                            event.preventDefault();
+                            const trimmed = manualInput.trim();
+                            if (trimmed.length === 0) return;
+                            addManualEntry(trimmed);
+                            setManualInput("");
+                          }}
+                        >
+                          <Input
+                            placeholder="Type manual context..."
+                            className="flex-1 border-0 bg-transparent shadow-none px-0 py-0 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-0"
+                            autoComplete="off"
+                            value={manualInput}
+                            onChange={event => setManualInput(event.target.value)}
+                          />
+                          <Button
+                            type="submit"
+                            size="icon"
+                            variant="ghost"
+                            className="rounded-full border border-border/50 bg-muted/70 p-1"
+                            disabled={manualInputLength === 0}
+                          >
+                            <ArrowUp className="h-3 w-3" />
+                            <span className="sr-only">Send manual context</span>
+                          </Button>
+                        </form>
+                      </div>
+                    </div> : null
+                  ]}
+                </div>
               </div>
             </div>
             <div className="flex flex-col gap-3 absolute bottom-4 left-0 right-0">
