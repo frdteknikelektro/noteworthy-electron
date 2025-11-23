@@ -6,7 +6,9 @@ import {
   NOTES_STORAGE_KEY,
   ACTIVE_NOTE_STORAGE_KEY,
   SETTINGS_STORAGE_KEY,
-  MODEL_STORAGE_KEY
+  MODEL_STORAGE_KEY,
+  FOLDERS_STORAGE_KEY,
+  ACTIVE_FOLDER_STORAGE_KEY
 } from "./storage-keys";
 import {
   DEFAULT_PREFERENCES,
@@ -26,18 +28,20 @@ export function generateId(prefix = "entry") {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
-function createFreshNote() {
+function createFreshNote({ folderId = null, initialContext = "", title } = {}) {
   const now = new Date().toISOString();
+  const defaultTitle = `Live note — ${new Date().toLocaleDateString()}`;
   return {
     id: generateId("note"),
-    title: `Live note — ${new Date().toLocaleDateString()}`,
+    title: typeof title === "string" && title.trim().length ? title.trim() : defaultTitle,
     createdAt: now,
     updatedAt: now,
     highlightsHtml: "",
     transcript: [],
-    initialContext: "",
+    initialContext: typeof initialContext === "string" ? initialContext : "",
     archived: false,
-    summaries: []
+    summaries: [],
+    folderId: typeof folderId === "string" ? folderId : null
   };
 }
 
@@ -51,7 +55,65 @@ function normalizeStoredNote(note) {
     archived: Boolean(note.archived),
     summaries: note.summaries || [],
     createdAt: note.createdAt || now,
-    updatedAt: note.updatedAt || note.createdAt || now
+    updatedAt: note.updatedAt || note.createdAt || now,
+    folderId: typeof note.folderId === "string" ? note.folderId : null
+  };
+}
+
+function normalizeTags(value) {
+  if (Array.isArray(value)) {
+    return value.map(tag => (typeof tag === "string" ? tag.trim() : "")).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(tag => tag.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function createFreshFolder({
+  name = "New Folder",
+  description = "",
+  defaultInitialContext = "",
+  defaultSummaryPrompt = "",
+  defaultSummaryType = "highlights",
+  tags = [],
+  color = "#7c3aed",
+  icon = "folder"
+} = {}) {
+  const now = new Date().toISOString();
+  const normalizedTags = normalizeTags(tags);
+  return {
+    id: generateId("folder"),
+    name: typeof name === "string" && name.trim().length ? name.trim() : "New Folder",
+    description: typeof description === "string" ? description.trim() : "",
+    defaultInitialContext: typeof defaultInitialContext === "string" ? defaultInitialContext.trim() : "",
+    defaultSummaryPrompt: typeof defaultSummaryPrompt === "string" ? defaultSummaryPrompt.trim() : "",
+    defaultSummaryType: typeof defaultSummaryType === "string" && defaultSummaryType.trim() ? defaultSummaryType.trim() : "highlights",
+    tags: normalizedTags,
+    color,
+    icon,
+    createdAt: now
+  };
+}
+
+function normalizeStoredFolder(folder) {
+  const now = new Date().toISOString();
+  return {
+    id: folder.id || generateId("folder"),
+    name: typeof folder.name === "string" && folder.name.trim().length ? folder.name.trim() : "New Folder",
+    description: typeof folder.description === "string" ? folder.description.trim() : "",
+    defaultInitialContext: folder.defaultInitialContext || "",
+    defaultSummaryPrompt: folder.defaultSummaryPrompt || "",
+    defaultSummaryType: typeof folder.defaultSummaryType === "string" && folder.defaultSummaryType.trim()
+      ? folder.defaultSummaryType.trim()
+      : "highlights",
+    tags: normalizeTags(folder.tags),
+    color: typeof folder.color === "string" && folder.color.trim() ? folder.color : "#7c3aed",
+    icon: typeof folder.icon === "string" && folder.icon.trim() ? folder.icon : "folder",
+    createdAt: folder.createdAt || now
   };
 }
 
@@ -72,6 +134,24 @@ function initNotesState() {
     console.warn("Unable to hydrate notes:", error);
     const note = createFreshNote();
     return { notes: [note], activeId: note.id };
+  }
+}
+
+function initFoldersState() {
+  if (typeof window === "undefined") {
+    return { folders: [], activeFolderId: null };
+  }
+
+  try {
+    const storedRaw = localStorage.getItem(FOLDERS_STORAGE_KEY);
+    const parsed = storedRaw ? JSON.parse(storedRaw) : [];
+    const folders = Array.isArray(parsed) ? parsed.map(normalizeStoredFolder) : [];
+    const storedActive = localStorage.getItem(ACTIVE_FOLDER_STORAGE_KEY);
+    const activeFolderId = storedActive && folders.some(folder => folder.id === storedActive) ? storedActive : null;
+    return { folders, activeFolderId };
+  } catch (error) {
+    console.warn("Unable to hydrate folders:", error);
+    return { folders: [], activeFolderId: null };
   }
 }
 
@@ -138,8 +218,11 @@ function resolveThemeTone(mode, prefersDark) {
 
 export function AppProvider({ children }) {
   const initial = useMemo(() => initNotesState(), []);
+  const folderInitial = useMemo(() => initFoldersState(), []);
   const [notes, setNotes] = useState(initial.notes);
   const [activeNoteId, setActiveNoteId] = useState(initial.activeId);
+  const [folders, setFolders] = useState(folderInitial.folders);
+  const [activeFolderId, setActiveFolderId] = useState(folderInitial.activeFolderId);
   const [searchTerm, setSearchTerm] = useState("");
   const [preferences, setPreferences] = useState(() => loadPreferencesState());
   const [model, setModel] = useState(() => loadStoredModel());
@@ -150,6 +233,11 @@ export function AppProvider({ children }) {
   const activeNote = useMemo(
     () => notes.find(note => note.id === activeNoteId) || notes[0] || null,
     [activeNoteId, notes]
+  );
+
+  const activeFolder = useMemo(
+    () => folders.find(folder => folder.id === activeFolderId) || null,
+    [folders, activeFolderId]
   );
 
   useEffect(() => {
@@ -166,9 +254,21 @@ export function AppProvider({ children }) {
   }, [notes, activeNoteId]);
 
   useEffect(() => {
+    if (!activeFolderId) return;
+    if (!folders.some(folder => folder.id === activeFolderId)) {
+      setActiveFolderId(null);
+    }
+  }, [activeFolderId, folders]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
   }, [notes]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(FOLDERS_STORAGE_KEY, JSON.stringify(folders));
+  }, [folders]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -178,6 +278,15 @@ export function AppProvider({ children }) {
       localStorage.removeItem(ACTIVE_NOTE_STORAGE_KEY);
     }
   }, [activeNoteId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (activeFolderId) {
+      localStorage.setItem(ACTIVE_FOLDER_STORAGE_KEY, activeFolderId);
+    } else {
+      localStorage.removeItem(ACTIVE_FOLDER_STORAGE_KEY);
+    }
+  }, [activeFolderId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -308,9 +417,62 @@ export function AppProvider({ children }) {
   );
 
   const createNote = useCallback(() => {
-    const note = createFreshNote();
+    const folderContext = activeFolder;
+    const note = createFreshNote({
+      folderId: folderContext?.id ?? null,
+      initialContext: folderContext?.defaultInitialContext ?? ""
+    });
     setNotes(prev => [note, ...prev]);
     setActiveNoteId(note.id);
+  }, [activeFolder]);
+
+  const createFolder = useCallback(folderInput => {
+    const folder = createFreshFolder(folderInput);
+    setFolders(prev => [folder, ...prev]);
+    setActiveFolderId(folder.id);
+  }, []);
+
+  const selectFolder = useCallback(folderId => {
+    setActiveFolderId(folderId);
+  }, []);
+
+  const clearFolderSelection = useCallback(() => {
+    setActiveFolderId(null);
+  }, []);
+
+  const updateFolder = useCallback((folderId, updates) => {
+    if (!folderId || !updates) return;
+    setFolders(prev =>
+      prev.map(folder => {
+        if (folder.id !== folderId) return folder;
+        return {
+          ...folder,
+          name:
+            typeof updates.name === "string" && updates.name.trim().length
+              ? updates.name.trim()
+              : folder.name,
+          description: typeof updates.description === "string" ? updates.description.trim() : folder.description,
+          defaultInitialContext:
+            typeof updates.defaultInitialContext === "string" ? updates.defaultInitialContext.trim() : folder.defaultInitialContext,
+          defaultSummaryPrompt:
+            typeof updates.defaultSummaryPrompt === "string" ? updates.defaultSummaryPrompt.trim() : folder.defaultSummaryPrompt,
+          defaultSummaryType:
+            typeof updates.defaultSummaryType === "string" && updates.defaultSummaryType.trim()
+              ? updates.defaultSummaryType.trim()
+              : folder.defaultSummaryType,
+          tags: updates.tags ? normalizeTags(updates.tags) : folder.tags,
+          color: typeof updates.color === "string" && updates.color.trim() ? updates.color : folder.color,
+          icon: typeof updates.icon === "string" && updates.icon.trim() ? updates.icon : folder.icon
+        };
+      })
+    );
+  }, []);
+
+  const deleteFolder = useCallback(folderId => {
+    if (!folderId) return;
+    setFolders(prev => prev.filter(folder => folder.id !== folderId));
+    setNotes(prev => prev.map(note => (note.folderId === folderId ? { ...note, folderId: null } : note)));
+    setActiveFolderId(prev => (prev === folderId ? null : prev));
   }, []);
 
   const selectNote = useCallback(noteId => {
@@ -377,7 +539,8 @@ export function AppProvider({ children }) {
 
   const filteredNotes = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    const sorted = [...notes].sort(
+    const scopedNotes = activeFolderId ? notes.filter(note => note.folderId === activeFolderId) : notes;
+    const sorted = [...scopedNotes].sort(
       (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
     );
     if (!term) return sorted;
@@ -391,7 +554,7 @@ export function AppProvider({ children }) {
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [notes, searchTerm]);
+  }, [notes, searchTerm, activeFolderId]);
 
   const generateSummary = useCallback(
     async (noteId, promptText, transcriptSnippet) => {
@@ -479,11 +642,17 @@ export function AppProvider({ children }) {
       notes,
       filteredNotes,
       searchTerm,
+      folders,
+      activeFolderId,
+      activeFolder,
       setSearchTerm,
       activeNote,
       activeNoteId,
       selectNote,
       createNote,
+      createFolder,
+      selectFolder,
+      clearFolderSelection,
       updateNoteTitle,
       updateNoteHighlights,
       updateNoteInitialContext,
@@ -493,6 +662,8 @@ export function AppProvider({ children }) {
       updateTranscriptEntry,
       deleteArchivedNotes,
       deleteNote,
+      updateFolder,
+      deleteFolder,
       preferences,
       handleLanguageChange,
       model,
@@ -510,10 +681,14 @@ export function AppProvider({ children }) {
       notes,
       filteredNotes,
       searchTerm,
-      activeNote,
-      activeNoteId,
+      folders,
+      activeFolderId,
+      activeFolder,
       selectNote,
       createNote,
+      createFolder,
+      selectFolder,
+      clearFolderSelection,
       updateNoteTitle,
       updateNoteHighlights,
       updateNoteInitialContext,
@@ -523,6 +698,8 @@ export function AppProvider({ children }) {
       updateTranscriptEntry,
       deleteArchivedNotes,
       deleteNote,
+      updateFolder,
+      deleteFolder,
       preferences,
       handleLanguageChange,
       model,

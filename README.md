@@ -15,6 +15,7 @@ Noteworthy is a beautiful Electron desktop note taker that pipes both microphone
 - **Backup recording** – optional combined WAV recorder for redundancy.
 - **Upcoming** – Offline capture via `whisper.cpp` so you can transcribe without an internet connection.
 - **Localized controls** – set a default transcription language (ships with Bahasa Indonesia) and add an optional context prompt before audio is uploaded.
+- **Folder organization** – group recordings into named folders with tags/colors and reusable context/summary defaults so each process starts with the right template.
 
 ## Prerequisites
 
@@ -50,6 +51,7 @@ For faster UI iteration you can run `npm run dev` to start the Vite dev server w
 - **Live transcript** – rolling feed of entries. Draft badges show when the model is listening or processing before the final text lands in the note.
 - **Highlights** – freeform contenteditable area for action items or context.
 - **Housekeeping** – archive a note when it is done, then clear archived notes in bulk from the sidebar.
+- **Folders** – create folders with tags/colors/default context and summary prompts; the folder list sits above history, and selecting a folder scopes the note list with a Back control.
 
 ## Exporting
 
