@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
+import { ArrowUp, CalendarDays, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
 import { LiveAudioVisualizer } from "react-audio-visualize";
 
 import { useApp } from "@/renderer/app-provider";
@@ -29,11 +29,11 @@ function formatTimestamp(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 export function NoteWorkspace() {
-  const { activeNote, updateNoteTitle, generateSummary, addManualEntry } = useApp();
+  const { activeNote, updateNoteTitle, generateSummary, addManualEntry, updateTranscriptEntry } = useApp();
   const { drafts, isCapturing, startCapture, stopCapture, micMuted, toggleMicMute, isRecording, mediaRecorder } = useAudio();
 
   const titleRef = useRef(null);
@@ -60,7 +60,7 @@ export function NoteWorkspace() {
     [draftEntries, noteEntries]
   );
 
-  const updatedTimestamp = useMemo(() => formatTimestamp(activeNote?.updatedAt), [activeNote?.updatedAt]);
+  const createdTimestamp = useMemo(() => formatTimestamp(activeNote?.createdAt), [activeNote?.createdAt]);
 
   const storedSummaries = activeNote?.summaries || [];
 
@@ -69,15 +69,20 @@ export function NoteWorkspace() {
 
   const chatMessages = useMemo(
     () =>
-      transcriptEntries.map(entry => ({
-        id: entry.id,
-        text: entry.text || "Waiting for audio…",
-        source: entry.source,
-        sourceLabel: SOURCE_LABELS[entry.source] || entry.source,
-        statusLabel: entry.statusLabel,
-        timestamp: entry.timestamp,
-        isManual: entry.source === "manual"
-      })),
+      transcriptEntries.map(entry => {
+        const textValue = entry.text ?? "";
+        return {
+          id: entry.id,
+          text: textValue || "Waiting for audio…",
+          hasText: Boolean(textValue),
+          source: entry.source,
+          sourceLabel: SOURCE_LABELS[entry.source] || entry.source,
+          statusLabel: entry.statusLabel,
+          timestamp: entry.timestamp,
+          isManual: entry.source === "manual",
+          isDraft: Boolean(entry.isDraft)
+        };
+      }),
     [transcriptEntries]
   );
 
@@ -86,7 +91,7 @@ export function NoteWorkspace() {
     if (!transcriptsElement) return;
 
     transcriptsElement.scrollTop = transcriptsElement.scrollHeight;
-  }, [chatMessages.length]);
+  }, [chatMessages.length, isCapturing]);
 
   useLayoutEffect(() => {
     const titleElement = titleRef.current;
@@ -107,6 +112,16 @@ export function NoteWorkspace() {
       titleElement.textContent = noteTitle;
     }
   }, [activeNote?.id, activeNote?.title]);
+
+  const handleTranscriptCommit = useCallback(
+    (message, event) => {
+      if (!activeNote?.id) return;
+      const text = event.currentTarget.textContent || "";
+      if (text === message.text) return;
+      updateTranscriptEntry(activeNote.id, message.id, text);
+    },
+    [activeNote?.id, updateTranscriptEntry]
+  );
 
   const handleGenerateSummary = async () => {
     if (!canGenerateSummary || isGenerating || !activeNote?.id) return;
@@ -208,8 +223,11 @@ export function NoteWorkspace() {
               }
             }}
           ></div>
-          {updatedTimestamp && (
-            <p className="text-xs text-muted-foreground">Last Updated {updatedTimestamp}</p>
+          {createdTimestamp && (
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <CalendarDays className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+              <span>Created {createdTimestamp}</span>
+            </p>
           )}
         </div>
       </div>
@@ -244,30 +262,46 @@ export function NoteWorkspace() {
                     </div>
                   )}
                   {[
-                    ...chatMessages.map(message => (
-                      <div
-                        key={message.id}
-                        className={cn(
-                          "flex flex-col gap-2 text-xs",
-                          message.isManual ? "items-end" : "items-start"
-                        )}
-                      >
+                    ...chatMessages.map(message => {
+                      const canEdit = message.hasText && !message.isDraft;
+                      return (
                         <div
+                          key={message.id}
                           className={cn(
-                            "max-w-[92%] px-4 py-3 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
-                            SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
-                            message.isManual && "ml-auto border-border/40"
+                            "flex flex-col gap-2 text-xs",
+                            message.isManual ? "items-end" : "items-start"
                           )}
                         >
-                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                            <span className="text-[11px] tracking-[0.28em] font-semibold">{message.sourceLabel}</span>
-                            <span aria-hidden="true">·</span>
-                            <span className="text-[10px] tracking-[0.18em]">{formatTimestamp(message.timestamp)}</span>
+                          <div
+                            className={cn(
+                              "max-w-[92%] px-2 py-1 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
+                              SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
+                              message.isManual && "ml-auto border-border/40"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                              <span className="text-xs tracking-wide font-semibold">{message.sourceLabel}</span>
+                              <span className="text-xs" aria-hidden="true">·</span>
+                              <span className="text-xs">{formatTimestamp(message.timestamp)}</span>
+                            </div>
+                            <div
+                              className={cn(
+                                "mt-1 text-inherit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                                canEdit ? "cursor-text" : "cursor-default"
+                              )}
+                              tabIndex={canEdit ? 0 : undefined}
+                              contentEditable={canEdit}
+                              suppressContentEditableWarning
+                              spellCheck={false}
+                              aria-label={`Transcript entry from ${message.sourceLabel}${message.isManual ? " (manual context)" : ""}`}
+                              onBlur={event => handleTranscriptCommit(message, event)}
+                            >
+                              {message.text}
+                            </div>
                           </div>
-                          <p className="mt-2 text-inherit">{message.text}</p>
                         </div>
-                      </div>
-                    )),
+                      );
+                    }),
                     isCapturing && chatMessages.length > 0 ? (
                       <div key="manual-context-form" className="flex flex-col gap-2 text-xs items-end">
                         <div
@@ -277,11 +311,8 @@ export function NoteWorkspace() {
                             "ml-auto border-border/40"
                           )}
                         >
-                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                            <span className="text-[11px] tracking-[0.28em] font-semibold">Manual Context</span>
-                          </div>
                           <form
-                            className="mt-2 flex items-center gap-2"
+                            className="flex items-center gap-2"
                             onSubmit={event => {
                               event.preventDefault();
                               const trimmed = manualInput.trim();

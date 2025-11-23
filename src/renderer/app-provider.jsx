@@ -260,6 +260,27 @@ export function AppProvider({ children }) {
     [activeNoteId]
   );
 
+  const updateTranscriptEntry = useCallback(
+    (noteId, entryId, text) => {
+      if (!noteId || !entryId) return;
+      const timestamp = new Date().toISOString();
+      setNotes(prev =>
+        prev.map(note => {
+          if (note.id !== noteId) return note;
+          let updated = false;
+          const transcript = (note.transcript || []).map(entry => {
+            if (entry.id !== entryId) return entry;
+            updated = true;
+            return { ...entry, text: text ?? entry.text };
+          });
+          if (!updated) return note;
+          return { ...note, transcript, updatedAt: timestamp };
+        })
+      );
+    },
+    []
+  );
+
   const createNote = useCallback(() => {
     const note = createFreshNote();
     setNotes(prev => [note, ...prev]);
@@ -439,6 +460,7 @@ export function AppProvider({ children }) {
       updateNoteHighlights,
       addManualEntry,
       archiveNote,
+      updateTranscriptEntry,
       deleteArchivedNotes,
       deleteNote,
       preferences,
@@ -466,6 +488,7 @@ export function AppProvider({ children }) {
       updateNoteHighlights,
       addManualEntry,
       archiveNote,
+      updateTranscriptEntry,
       deleteArchivedNotes,
       deleteNote,
       preferences,
