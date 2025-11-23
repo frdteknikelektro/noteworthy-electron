@@ -126,14 +126,13 @@ function initNotesState() {
   try {
     const storedRaw = localStorage.getItem(NOTES_STORAGE_KEY);
     const parsed = storedRaw ? JSON.parse(storedRaw) : [];
-    const notes = Array.isArray(parsed) && parsed.length ? parsed.map(normalizeStoredNote) : [createFreshNote()];
+    const notes = Array.isArray(parsed) ? parsed.map(normalizeStoredNote) : [];
     const storedActive = localStorage.getItem(ACTIVE_NOTE_STORAGE_KEY);
     const activeId = storedActive && notes.some(note => note.id === storedActive) ? storedActive : notes[0]?.id || null;
     return { notes, activeId };
   } catch (error) {
     console.warn("Unable to hydrate notes:", error);
-    const note = createFreshNote();
-    return { notes: [note], activeId: note.id };
+    return { notes: [], activeId: null };
   }
 }
 
@@ -223,6 +222,7 @@ export function AppProvider({ children }) {
   const [activeNoteId, setActiveNoteId] = useState(initial.activeId);
   const [folders, setFolders] = useState(folderInitial.folders);
   const [activeFolderId, setActiveFolderId] = useState(folderInitial.activeFolderId);
+  const [folderWorkspaceOpen, setFolderWorkspaceOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [preferences, setPreferences] = useState(() => loadPreferencesState());
   const [model, setModel] = useState(() => loadStoredModel());
@@ -254,6 +254,13 @@ export function AppProvider({ children }) {
   }, [sortedNotes, activeFolderId]);
 
   useEffect(() => {
+    if (folderWorkspaceOpen) {
+      if (activeNoteId !== null) {
+        setActiveNoteId(null);
+      }
+      return;
+    }
+
     if (notes.length === 0) {
       if (activeNoteId !== null) {
         setActiveNoteId(null);
@@ -262,13 +269,15 @@ export function AppProvider({ children }) {
     }
 
     if (activeFolderId) {
-      if (scopedNotes.length > 0) {
-        const activeIsScoped = scopedNotes.some(note => note.id === activeNoteId);
-        if (!activeIsScoped) {
-          setActiveNoteId(scopedNotes[0].id);
+      if (scopedNotes.length === 0) {
+        if (activeNoteId !== null) {
+          setActiveNoteId(null);
         }
-      } else if (activeNoteId !== null) {
-        setActiveNoteId(null);
+        return;
+      }
+      const activeIsScoped = scopedNotes.some(note => note.id === activeNoteId);
+      if (!activeIsScoped) {
+        setActiveNoteId(scopedNotes[0].id);
       }
       return;
     }
@@ -280,12 +289,13 @@ export function AppProvider({ children }) {
         setActiveNoteId(fallbackId);
       }
     }
-  }, [notes, activeNoteId, activeFolderId, scopedNotes, sortedNotes]);
+  }, [notes, activeNoteId, activeFolderId, folderWorkspaceOpen, scopedNotes, sortedNotes]);
 
   useEffect(() => {
     if (!activeFolderId) return;
     if (!folders.some(folder => folder.id === activeFolderId)) {
       setActiveFolderId(null);
+      setFolderWorkspaceOpen(false);
     }
   }, [activeFolderId, folders]);
 
@@ -445,6 +455,17 @@ export function AppProvider({ children }) {
     []
   );
 
+  const openFolderWorkspace = useCallback(folderId => {
+    if (!folderId) return;
+    setActiveFolderId(folderId);
+    setActiveNoteId(null);
+    setFolderWorkspaceOpen(true);
+  }, []);
+
+  const closeFolderWorkspace = useCallback(() => {
+    setFolderWorkspaceOpen(false);
+  }, []);
+
   const createNote = useCallback(() => {
     const folderContext = activeFolder;
     const note = createFreshNote({
@@ -453,20 +474,29 @@ export function AppProvider({ children }) {
     });
     setNotes(prev => [note, ...prev]);
     setActiveNoteId(note.id);
+    setActiveFolderId(folderContext?.id ?? null);
+    setFolderWorkspaceOpen(false);
   }, [activeFolder]);
 
-  const createFolder = useCallback(folderInput => {
-    const folder = createFreshFolder(folderInput);
-    setFolders(prev => [folder, ...prev]);
-    setActiveFolderId(folder.id);
-  }, []);
+  const createFolder = useCallback(
+    folderInput => {
+      const folder = createFreshFolder(folderInput);
+      setFolders(prev => [folder, ...prev]);
+      openFolderWorkspace(folder.id);
+    },
+    [openFolderWorkspace]
+  );
 
-  const selectFolder = useCallback(folderId => {
-    setActiveFolderId(folderId);
-  }, []);
+  const selectFolder = useCallback(
+    folderId => {
+      openFolderWorkspace(folderId);
+    },
+    [openFolderWorkspace]
+  );
 
   const clearFolderSelection = useCallback(() => {
     setActiveFolderId(null);
+    setFolderWorkspaceOpen(false);
   }, []);
 
   const updateFolder = useCallback((folderId, updates) => {
@@ -497,16 +527,30 @@ export function AppProvider({ children }) {
     );
   }, []);
 
-  const deleteFolder = useCallback(folderId => {
-    if (!folderId) return;
-    setFolders(prev => prev.filter(folder => folder.id !== folderId));
-    setNotes(prev => prev.map(note => (note.folderId === folderId ? { ...note, folderId: null } : note)));
-    setActiveFolderId(prev => (prev === folderId ? null : prev));
-  }, []);
+  const deleteFolder = useCallback(
+    folderId => {
+      if (!folderId) return;
+      setFolders(prev => prev.filter(folder => folder.id !== folderId));
+      setNotes(prev => prev.map(note => (note.folderId === folderId ? { ...note, folderId: null } : note)));
+      setActiveFolderId(prev => (prev === folderId ? null : prev));
+      setFolderWorkspaceOpen(false);
+    },
+    []
+  );
 
-  const selectNote = useCallback(noteId => {
-    setActiveNoteId(noteId);
-  }, []);
+  const selectNote = useCallback(
+    noteId => {
+      setActiveNoteId(noteId);
+      const note = notes.find(n => n.id === noteId);
+      if (note?.folderId) {
+        setActiveFolderId(note.folderId);
+      } else {
+        setActiveFolderId(null);
+      }
+      setFolderWorkspaceOpen(false);
+    },
+    [notes]
+  );
 
   const updateNote = useCallback((noteId, updates) => {
     if (!noteId) return;
@@ -670,6 +714,9 @@ export function AppProvider({ children }) {
       folders,
       activeFolderId,
       activeFolder,
+      folderWorkspaceOpen,
+      openFolderWorkspace,
+      closeFolderWorkspace,
       setSearchTerm,
       activeNote,
       activeNoteId,
@@ -709,6 +756,9 @@ export function AppProvider({ children }) {
       folders,
       activeFolderId,
       activeFolder,
+      folderWorkspaceOpen,
+      openFolderWorkspace,
+      closeFolderWorkspace,
       selectNote,
       createNote,
       createFolder,

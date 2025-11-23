@@ -6,8 +6,24 @@ import { THEME_LABELS, THEME_MODES } from "@/renderer/settings/constants";
 import { Moon, Sun } from "lucide-react";
 
 export function SiteHeader() {
-  const { activeNote, themeMode, systemPrefersDark, handleThemeModeChange } = useApp();
-  const title = activeNote?.title?.trim() || "New Note";
+  const {
+    activeNote,
+    activeFolder,
+    folderWorkspaceOpen,
+    openFolderWorkspace,
+    themeMode,
+    systemPrefersDark,
+    handleThemeModeChange
+  } = useApp();
+  const noteTitle = activeNote?.title?.trim() || "New Note";
+  const folderName = activeFolder?.name?.trim() || "";
+  const isFolderContext = Boolean(
+    activeFolder && activeNote && activeNote.folderId && activeNote.folderId === activeFolder.id
+  );
+  const handleFolderClick = () => {
+    if (!activeFolder?.id) return;
+    openFolderWorkspace(activeFolder.id);
+  };
   const tone = themeMode === "system" ? (systemPrefersDark ? "dark" : "light") : themeMode;
   const toneLabel = tone === "dark" ? "Dark" : "Light";
   const modeLabel = themeMode === "system" ? `${toneLabel} (system)` : toneLabel;
@@ -29,7 +45,31 @@ export function SiteHeader() {
         <div className="flex items-center gap-1">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
-          <h1 className="text-base font-medium">{title}</h1>
+          <h1 className="text-base font-medium">
+            {isFolderContext ? (
+              <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleFolderClick}
+                  className="text-base font-semibold tracking-tight text-foreground transition-colors hover:text-primary"
+                >
+                  {folderName}
+                </button>
+                <span className="text-base font-semibold uppercase tracking-wide text-muted-foreground">/</span>
+                <span>{noteTitle}</span>
+              </span>
+            ) : folderWorkspaceOpen && activeFolder ? (
+              <button
+                type="button"
+                onClick={handleFolderClick}
+                className="text-base font-semibold tracking-tight text-foreground transition-colors hover:text-primary"
+              >
+                {folderName}
+              </button>
+            ) : (
+              noteTitle
+            )}
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:text-sm">

@@ -106,7 +106,10 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
       </SidebarHeader>
 
       <SidebarContent className="flex flex-col flex-1 space-y-3 px-1 py-2 overflow-hidden">
-        <div className="space-y-2 flex flex-col border-b border-border pb-4" style={{ maxHeight: "50%" }}>
+        <div
+          className="flex flex-col gap-2 border-b border-border pb-4"
+          style={{ maxHeight: "50%" }}
+        >
           <div className="flex items-center justify-between px-3 text-xs font-semibold uppercase text-muted-foreground">
             <span>Folders</span>
             <Button
@@ -120,7 +123,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
               New folder
             </Button>
           </div>
-          <div className="flex-1 overflow-y-auto px-1">
+          <div className="flex-1 min-h-0 overflow-y-auto px-1">
             {hasFolders ? (
               <SidebarMenu className="space-y-1">
                 {folders.map(folder => {
@@ -135,12 +138,12 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
                       >
                         <div className="flex items-center gap-3">
                           <span
-                            className="grid h-7 w-7 place-items-center rounded-lg text-white"
-                            style={{ backgroundColor: folder.color || "#7c3aed" }}
+                            className="grid h-7 w-7 place-items-center rounded-lg"
+                            style={{ color: folder.color }}
                           >
                             <Icon className="h-4 w-4" aria-hidden="true" />
                           </span>
-                          <span className="truncate text-sm font-semibold">
+                          <span className="truncate text-sm">
                             {folder.name || "New Folder"}
                           </span>
                         </div>
@@ -166,7 +169,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
             )}
           </div>
           {activeFolder && (
-            <p className="px-3 text-sm font-semibold text-foreground">Folder: {activeFolder.name}</p>
+            <p className="px-3 text-sm font-semibold text-foreground">{activeFolder.name}</p>
           )}
           <div className="flex-1 min-h-0 overflow-y-auto px-1">
             {filteredNotes.length > 0 ? (
