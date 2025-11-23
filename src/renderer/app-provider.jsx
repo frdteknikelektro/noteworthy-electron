@@ -35,6 +35,7 @@ function createFreshNote() {
     updatedAt: now,
     highlightsHtml: "",
     transcript: [],
+    initialContext: "",
     archived: false,
     summaries: []
   };
@@ -45,6 +46,7 @@ function normalizeStoredNote(note) {
   return {
     ...note,
     transcript: note.transcript || [],
+    initialContext: note.initialContext || "",
     highlightsHtml: note.highlightsHtml || "",
     archived: Boolean(note.archived),
     summaries: note.summaries || [],
@@ -260,6 +262,27 @@ export function AppProvider({ children }) {
     [activeNoteId]
   );
 
+  const addInitialEntry = useCallback(
+    text => {
+      if (!activeNoteId) return;
+      const timestamp = new Date().toISOString();
+      const entry = {
+        id: generateId("initial"),
+        source: "initial",
+        text,
+        timestamp
+      };
+      setNotes(prev =>
+        prev.map(note =>
+          note.id === activeNoteId
+            ? { ...note, transcript: [...(note.transcript || []), entry], updatedAt: timestamp }
+            : note
+        )
+      );
+    },
+    [activeNoteId]
+  );
+
   const updateTranscriptEntry = useCallback(
     (noteId, entryId, text) => {
       if (!noteId || !entryId) return;
@@ -274,7 +297,10 @@ export function AppProvider({ children }) {
             return { ...entry, text: text ?? entry.text };
           });
           if (!updated) return note;
-          return { ...note, transcript, updatedAt: timestamp };
+          const updatedEntry = transcript.find(entry => entry.id === entryId);
+          const nextInitialContext =
+            updatedEntry?.source === "initial" ? (updatedEntry.text || "").trim() : note.initialContext;
+          return { ...note, transcript, updatedAt: timestamp, initialContext: nextInitialContext };
         })
       );
     },
@@ -308,6 +334,14 @@ export function AppProvider({ children }) {
   const updateNoteHighlights = useCallback(
     (noteId, highlightsHtml) => {
       updateNote(noteId, { highlightsHtml });
+    },
+    [updateNote]
+  );
+
+  const updateNoteInitialContext = useCallback(
+    (noteId, initialContext) => {
+      const normalized = typeof initialContext === "string" ? initialContext.trim() : "";
+      updateNote(noteId, { initialContext: normalized });
     },
     [updateNote]
   );
@@ -379,14 +413,8 @@ export function AppProvider({ children }) {
       }
 
       const payload = {
-        model: "gpt-4o-mini",
-        temperature: 0.2,
+        model: "gpt-5-mini",
         messages: [
-          {
-            role: "system",
-            content:
-              "You are a concise meeting summarizer. Turn the transcript into a well-organized summary that highlights decisions, action items, and follow-ups. Be factual and keep the tone professional."
-          },
           {
             role: "user",
             content: `Prompt: ${normalizedPrompt}\n\nTranscript:\n${snippet}`
@@ -458,7 +486,9 @@ export function AppProvider({ children }) {
       createNote,
       updateNoteTitle,
       updateNoteHighlights,
+      updateNoteInitialContext,
       addManualEntry,
+      addInitialEntry,
       archiveNote,
       updateTranscriptEntry,
       deleteArchivedNotes,
@@ -486,7 +516,9 @@ export function AppProvider({ children }) {
       createNote,
       updateNoteTitle,
       updateNoteHighlights,
+      updateNoteInitialContext,
       addManualEntry,
+      addInitialEntry,
       archiveNote,
       updateTranscriptEntry,
       deleteArchivedNotes,

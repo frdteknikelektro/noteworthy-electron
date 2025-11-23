@@ -237,8 +237,13 @@ export function AudioProvider({
     if (transcription.language) {
       config.input_audio_transcription.language = transcription.language;
     }
+    const initialContext =
+      typeof activeNote?.initialContext === "string" ? activeNote.initialContext.trim() : "";
+    if (initialContext) {
+      config.input_audio_transcription.prompt = initialContext;
+    }
     return config;
-  }, [model, preferences]);
+  }, [model, preferences, activeNote?.initialContext]);
 
   const ensureCapturePreconditions = useCallback(() => {
     if (!activeNote) {

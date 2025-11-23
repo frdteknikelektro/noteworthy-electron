@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, CalendarDays, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
 import { LiveAudioVisualizer } from "react-audio-visualize";
 
@@ -16,13 +16,15 @@ import { buildTranscriptSnippet } from "@/renderer/lib/transcript";
 const SOURCE_LABELS = {
   microphone: "Microphone",
   speaker: "System audio",
-  manual: "Manual context"
+  manual: "Manual context",
+  initial: "Initial context"
 };
 
 const SOURCE_BUBBLE_CLASSES = {
   microphone: "bg-sidebar-accent/10 text-sidebar-accent-foreground",
   speaker: "bg-secondary/15 text-secondary-foreground",
-  manual: "bg-primary/10 text-secondary-foreground"
+  manual: "bg-primary/10 text-secondary-foreground",
+  initial: "bg-secondary/10 text-secondary-foreground"
 };
 
 function formatTimestamp(value) {
@@ -33,7 +35,17 @@ function formatTimestamp(value) {
 }
 
 export function NoteWorkspace() {
-  const { activeNote, updateNoteTitle, generateSummary, addManualEntry, updateTranscriptEntry } = useApp();
+  const {
+    activeNote,
+    updateNoteTitle,
+    generateSummary,
+    addManualEntry,
+    addInitialEntry,
+    updateTranscriptEntry,
+    updateNoteInitialContext,
+    themeMode,
+    systemPrefersDark
+  } = useApp();
   const { drafts, isCapturing, startCapture, stopCapture, micMuted, toggleMicMute, isRecording, mediaRecorder } = useAudio();
 
   const titleRef = useRef(null);
@@ -44,6 +56,7 @@ export function NoteWorkspace() {
   const [summaryError, setSummaryError] = useState("");
   const [summaryFeedback, setSummaryFeedback] = useState("");
   const [manualInput, setManualInput] = useState("");
+  const [initialContextInput, setInitialContextInput] = useState("");
 
   const draftEntries = useMemo(() => {
     return Object.values(drafts)
@@ -66,6 +79,24 @@ export function NoteWorkspace() {
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
   const manualInputLength = manualInput.trim().length;
+  const hasInitialEntry = noteEntries.some(entry => entry.source === "initial");
+  const showInitialForm = !hasInitialEntry;
+  const isLiveVisualizerActive = isRecording && mediaRecorder;
+  const themeTone = themeMode === "system" ? (systemPrefersDark ? "dark" : "light") : themeMode;
+  const visualizerColors =
+    themeTone === "dark"
+      ? {
+          barColor: "rgba(255,255,255,0.65)",
+          barPlayedColor: "rgba(255,255,255,0.95)"
+        }
+      : {
+          barColor: "rgba(0,0,0,0.65)",
+          barPlayedColor: "rgba(0,0,0,0.95)"
+        };
+
+  useEffect(() => {
+    setInitialContextInput(activeNote?.initialContext || "");
+  }, [activeNote?.id, activeNote?.initialContext]);
 
   const chatMessages = useMemo(
     () =>
@@ -80,6 +111,7 @@ export function NoteWorkspace() {
           statusLabel: entry.statusLabel,
           timestamp: entry.timestamp,
           isManual: entry.source === "manual",
+          isInitial: entry.source === "initial",
           isDraft: Boolean(entry.isDraft)
         };
       }),
@@ -122,6 +154,27 @@ export function NoteWorkspace() {
     },
     [activeNote?.id, updateTranscriptEntry]
   );
+
+  const handleInitialContextChange = useCallback(
+    event => {
+      const value = event.currentTarget.value;
+      setInitialContextInput(value);
+      if (activeNote?.id) {
+        updateNoteInitialContext(activeNote.id, value);
+      }
+    },
+    [activeNote?.id, updateNoteInitialContext]
+  );
+
+  const submitInitialContextEntry = useCallback(() => {
+    if (!activeNote?.id || hasInitialEntry) return;
+    const trimmed = initialContextInput.trim();
+    const normalized = trimmed;
+    setInitialContextInput(normalized);
+    updateNoteInitialContext(activeNote.id, normalized);
+    const entryText = trimmed.length ? trimmed : "-";
+    addInitialEntry(entryText);
+  }, [activeNote?.id, hasInitialEntry, initialContextInput, updateNoteInitialContext, addInitialEntry]);
 
   const handleGenerateSummary = async () => {
     if (!canGenerateSummary || isGenerating || !activeNote?.id) return;
@@ -193,10 +246,10 @@ export function NoteWorkspace() {
       stopCapture();
       return;
     }
+    submitInitialContextEntry();
     void startCapture();
-  }, [isCapturing, startCapture, stopCapture]);
+  }, [isCapturing, startCapture, stopCapture, submitInitialContextEntry]);
 
-  const showPlaceholder = chatMessages.length === 0;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 h-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -256,27 +309,47 @@ export function NoteWorkspace() {
                   ref={transcriptsRef}
                   className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pt-3 pb-16"
                 >
-                  {showPlaceholder && (
-                    <div className="bg-background/80 p-5 text-center text-sm text-muted-foreground">
-                      Start capture to see live transcription entries.
+                  {showInitialForm && (
+                    <div className="flex flex-col gap-2 text-xs items-end w-full">
+                      <div
+                        className={cn(
+                          "w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground border-border/40",
+                          SOURCE_BUBBLE_CLASSES.initial
+                        )}
+                      >
+                        <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                          <span className="text-xs tracking-wide font-semibold">Initial context</span>
+                        </div>
+                        <div className="mt-3">
+                          <Input
+                            placeholder="Type initial context..."
+                            className="w-full border-0 bg-transparent shadow-none px-0 py-0 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-0"
+                            autoComplete="off"
+                            value={initialContextInput}
+                            onChange={handleInitialContextChange}
+                            aria-label="Initial context"
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
                   {[
                     ...chatMessages.map(message => {
                       const canEdit = message.hasText && !message.isDraft;
+                      const alignRight = message.isManual || message.isInitial;
                       return (
                         <div
                           key={message.id}
                           className={cn(
                             "flex flex-col gap-2 text-xs",
-                            message.isManual ? "items-end" : "items-start"
+                            alignRight ? "items-end" : "items-start"
                           )}
                         >
                           <div
                             className={cn(
                               "max-w-[92%] px-2 py-1 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
                               SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
-                              message.isManual && "ml-auto border-border/40"
+                              alignRight && "ml-auto border-border/40"
                             )}
                           >
                             <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
@@ -302,6 +375,31 @@ export function NoteWorkspace() {
                         </div>
                       );
                     }),
+                    isCapturing && chatMessages.length > 0 && isLiveVisualizerActive ? (
+                      <div key="manual-context-visualizer" className="flex flex-col gap-2 text-xs items-start">
+                        <div
+                          className={cn(
+                            "max-w-fit w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground",
+                            SOURCE_BUBBLE_CLASSES.manual,
+                            "border-border/40"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <LiveAudioVisualizer
+                              mediaRecorder={mediaRecorder}
+                              width={130}
+                              height={24}
+                              barWidth={3}
+                              gap={1.5}
+                              backgroundColor="transparent"
+                              barColor={visualizerColors.barColor}
+                              barPlayedColor={visualizerColors.barPlayedColor}
+                            />
+                            <span className="sr-only">Still listening</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null,
                     isCapturing && chatMessages.length > 0 ? (
                       <div key="manual-context-form" className="flex flex-col gap-2 text-xs items-end">
                         <div
@@ -359,23 +457,7 @@ export function NoteWorkspace() {
                   ) : (
                     <CircleDot className="h-4 w-4 text-foreground" />
                   )}
-                  {isRecording && mediaRecorder ? (
-                    <div className="flex items-center gap-2">
-                      <LiveAudioVisualizer
-                        mediaRecorder={mediaRecorder}
-                        width={130}
-                        height={24}
-                        barWidth={3}
-                        gap={1.5}
-                        backgroundColor="transparent"
-                        barColor="rgba(255,255,255,0.65)"
-                        barPlayedColor="rgba(255,255,255,0.95)"
-                      />
-                      <span className="sr-only">Recording audio levels</span>
-                    </div>
-                  ) : (
-                    <span>Record Session</span>
-                  )}
+                  <span>Record Session</span>
                 </Button>
 
                 <Button
