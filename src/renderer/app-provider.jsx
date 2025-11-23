@@ -80,7 +80,7 @@ function createFreshFolder({
   defaultSummaryPrompt = "",
   defaultSummaryType = "highlights",
   tags = [],
-  color = "#7c3aed",
+  color = "#8b4513",
   icon = "folder"
 } = {}) {
   const now = new Date().toISOString();
@@ -111,7 +111,7 @@ function normalizeStoredFolder(folder) {
       ? folder.defaultSummaryType.trim()
       : "highlights",
     tags: normalizeTags(folder.tags),
-    color: typeof folder.color === "string" && folder.color.trim() ? folder.color : "#7c3aed",
+    color: typeof folder.color === "string" && folder.color.trim() ? folder.color : "#8b4513",
     icon: typeof folder.icon === "string" && folder.icon.trim() ? folder.icon : "folder",
     createdAt: folder.createdAt || now
   };
@@ -542,14 +542,16 @@ export function AppProvider({ children }) {
     noteId => {
       setActiveNoteId(noteId);
       const note = notes.find(n => n.id === noteId);
-      if (note?.folderId) {
-        setActiveFolderId(note.folderId);
+      if (activeFolderId) {
+        if (note?.folderId && note.folderId !== activeFolderId) {
+          setActiveFolderId(note.folderId);
+        }
       } else {
         setActiveFolderId(null);
       }
       setFolderWorkspaceOpen(false);
     },
-    [notes]
+    [notes, activeFolderId]
   );
 
   const updateNote = useCallback((noteId, updates) => {

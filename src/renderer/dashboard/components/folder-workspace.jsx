@@ -20,6 +20,7 @@ const ICON_OPTIONS = [
 ];
 
 const ACCENT_COLOR_OPTIONS = [
+  { value: "#8b4513", label: "Brown" },
   { value: "#6366f1", label: "Indigo" },
   { value: "#22c55e", label: "Emerald" },
   { value: "#f97316", label: "Amber" },
