@@ -20,9 +20,13 @@ import {
   FieldDescription,
   FieldLabel
 } from "@/renderer/components/ui/field";
+import { Button } from "@/renderer/components/ui/button";
 import { useApp } from "@/renderer/app-provider";
 import { useAudio } from "@/renderer/audio-provider";
-import { LANGUAGE_LABELS, MODEL_OPTIONS } from "@/renderer/settings/constants";
+import {
+  LANGUAGE_LABELS,
+  MODEL_OPTIONS
+} from "@/renderer/settings/constants";
 
 const PROVIDER_OPTIONS = [{ value: "openai", label: "OpenAI" }];
 
@@ -33,13 +37,20 @@ export default function SettingsModal() {
     settingsOpen,
     setSettingsOpen,
     handleModelChange,
-    handleLanguageChange
+    handleLanguageChange,
+    resetAllData
   } = useApp();
   const { isCapturing, micDevices, micDeviceId, handleMicChange } = useAudio();
 
   const inputDisabled = isCapturing;
   const handleModelSelect = value => handleModelChange({ target: { value } });
   const handleLanguageSelect = value => handleLanguageChange({ target: { value } });
+  const handleResetAll = () => {
+    if (!window.confirm("Resetting will delete all notes, folders, and preferences. Continue?")) {
+      return;
+    }
+    resetAllData();
+  };
 
   return (
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -104,15 +115,22 @@ export default function SettingsModal() {
                 </SelectTrigger>
                 <SelectContent>
                   {micDevices.length === 0 ? (
-                    <SelectItem key="no-mic" value="" disabled>
+                    <SelectItem key="no-mic" value="no-mic" disabled>
                       No microphones detected
                     </SelectItem>
                   ) : (
-                    micDevices.map((device, index) => (
-                      <SelectItem key={device.deviceId || `mic-${index}`} value={device.deviceId}>
-                        {device.label || `Microphone ${index + 1}`}
-                      </SelectItem>
-                    ))
+                    micDevices
+                      .filter(device => Boolean(device.deviceId))
+                      .map((device, index) => (
+                        <SelectItem key={device.deviceId || `mic-${index}`} value={device.deviceId}>
+                          {device.label || `Microphone ${index + 1}`}
+                        </SelectItem>
+                      ))
+                  )}
+                  {!micDevices.some(device => Boolean(device.deviceId)) && micDevices.length > 0 && (
+                    <SelectItem key="no-valid-mic" value="no-mic" disabled>
+                      Microphone information pending permissions
+                    </SelectItem>
                   )}
                 </SelectContent>
               </Select>
@@ -144,6 +162,16 @@ export default function SettingsModal() {
               </Select>
             </FieldContent>
           </Field>
+        </div>
+
+        <div className="border border-border bg-card/80 p-4 text-sm text-muted-foreground">
+          <p className="mb-3 text-xs uppercase tracking-wide text-muted-foreground">Danger zone</p>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Resetting the app returns it to a fresh install: it clears notes, folders, and all saved preferences.
+          </p>
+          <Button variant="destructive" size="sm" onClick={handleResetAll}>
+            Reset All
+          </Button>
         </div>
 
       </DialogContent>

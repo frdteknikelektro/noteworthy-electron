@@ -8,7 +8,8 @@ import {
   SETTINGS_STORAGE_KEY,
   MODEL_STORAGE_KEY,
   FOLDERS_STORAGE_KEY,
-  ACTIVE_FOLDER_STORAGE_KEY
+  ACTIVE_FOLDER_STORAGE_KEY,
+  MIC_DEVICE_STORAGE_KEY
 } from "./storage-keys";
 import {
   DEFAULT_PREFERENCES,
@@ -650,7 +651,9 @@ export function AppProvider({ children }) {
       if (!snippet) {
         throw new Error("No transcript content is available yet. Capture audio first.");
       }
-      const normalizedPrompt = promptText?.trim() || "Meeting summary";
+      const folderContext = folders.find(folder => folder.id === note.folderId);
+      const folderPrompt = folderContext?.defaultSummaryPrompt?.trim();
+      const normalizedPrompt = promptText?.trim() || folderPrompt || "Meeting summary";
       const apiKey = window.electronAPI?.apiKey;
       if (!apiKey) {
         throw new Error("Missing OpenAI API key. Add OPENAI_KEY to your .env file.");
@@ -707,12 +710,38 @@ export function AppProvider({ children }) {
 
       return summary;
     },
-    [notes, updateNote]
+    [notes, folders, updateNote]
   );
 
   const handleThemeModeChange = useCallback(mode => {
     if (!THEME_MODES.includes(mode)) return;
     setThemeMode(mode);
+  }, []);
+
+  const resetAllData = useCallback(() => {
+    const freshNote = createFreshNote();
+    if (typeof window !== "undefined") {
+      [
+        NOTES_STORAGE_KEY,
+        ACTIVE_NOTE_STORAGE_KEY,
+        FOLDERS_STORAGE_KEY,
+        ACTIVE_FOLDER_STORAGE_KEY,
+        SETTINGS_STORAGE_KEY,
+        MODEL_STORAGE_KEY,
+        THEME_STORAGE_KEY,
+        MIC_DEVICE_STORAGE_KEY
+      ].forEach(key => window.localStorage.removeItem(key));
+    }
+    setNotes([freshNote]);
+    setActiveNoteId(freshNote.id);
+    setFolders([]);
+    setActiveFolderId(null);
+    setFolderWorkspaceOpen(false);
+    setSearchTerm("");
+    setPreferences({ ...DEFAULT_PREFERENCES });
+    setModel(DEFAULT_MODEL);
+    setThemeMode("system");
+    setSettingsOpen(false);
   }, []);
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
@@ -759,6 +788,7 @@ export function AppProvider({ children }) {
       setSettingsOpen,
       themeMode,
       handleThemeModeChange,
+      resetAllData,
       systemPrefersDark,
       generateSummary
     }),
@@ -799,6 +829,7 @@ export function AppProvider({ children }) {
       setSettingsOpen,
       themeMode,
       handleThemeModeChange,
+      resetAllData,
       systemPrefersDark,
       generateSummary
     ]

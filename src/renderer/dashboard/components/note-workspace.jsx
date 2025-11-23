@@ -69,6 +69,12 @@ export function NoteWorkspace() {
   const [manualInput, setManualInput] = useState("");
   const [initialContextInput, setInitialContextInput] = useState("");
 
+  const folderSummaryPrompt = useMemo(() => {
+    if (!activeNote?.folderId) return "";
+    const folder = folders.find(folder => folder.id === activeNote.folderId);
+    return folder?.defaultSummaryPrompt?.trim() || "";
+  }, [folders, activeNote?.folderId]);
+
   const draftEntries = useMemo(() => {
     return Object.values(drafts)
       .filter(Boolean)
@@ -550,7 +556,7 @@ export function NoteWorkspace() {
                 <textarea
                   value={summaryPrompt}
                   onChange={event => setSummaryPrompt(event.target.value)}
-                  placeholder="E.g., highlight key decisions, action items, or next steps."
+                  placeholder={folderSummaryPrompt || "E.g., highlight key decisions, action items, or next steps."}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   rows={4}
                 />
