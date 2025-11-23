@@ -390,6 +390,8 @@ export function AudioProvider({
     }
   }, []);
 
+  const mediaRecorder = wavRecorderRef.current?.mediaRecorder || null;
+
   const value = useMemo(
     () => ({
       micDeviceId,
@@ -399,6 +401,7 @@ export function AudioProvider({
       drafts,
       streamStatus,
       isRecording,
+      mediaRecorder,
       systemAudioEnabled,
       startCapture,
       stopCapture,
@@ -415,6 +418,7 @@ export function AudioProvider({
       drafts,
       streamStatus,
       isRecording,
+      mediaRecorder,
       systemAudioEnabled,
       startCapture,
       stopCapture,

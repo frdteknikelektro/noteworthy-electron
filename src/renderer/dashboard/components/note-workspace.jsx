@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {ArrowDown, ArrowUp, CircleDot, Mic, MicOff, StopCircle} from "lucide-react";
+import { ArrowUp, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
+import { LiveAudioVisualizer } from "react-audio-visualize";
 
 import { useApp } from "@/renderer/app-provider";
 import { useAudio } from "@/renderer/audio-provider";
@@ -33,7 +34,7 @@ function formatTimestamp(value) {
 
 export function NoteWorkspace() {
   const { activeNote, updateNoteTitle, generateSummary, addManualEntry } = useApp();
-  const { drafts, isCapturing, startCapture, stopCapture, micMuted, toggleMicMute } = useAudio();
+  const { drafts, isCapturing, startCapture, stopCapture, micMuted, toggleMicMute, isRecording, mediaRecorder } = useAudio();
 
   const titleRef = useRef(null);
   const previousNoteIdRef = useRef(null);
@@ -327,7 +328,23 @@ export function NoteWorkspace() {
                   ) : (
                     <CircleDot className="h-4 w-4 text-foreground" />
                   )}
-                  <span>Record Session</span>
+                  {isRecording && mediaRecorder ? (
+                    <div className="flex items-center gap-2">
+                      <LiveAudioVisualizer
+                        mediaRecorder={mediaRecorder}
+                        width={130}
+                        height={24}
+                        barWidth={3}
+                        gap={1.5}
+                        backgroundColor="transparent"
+                        barColor="rgba(255,255,255,0.65)"
+                        barPlayedColor="rgba(255,255,255,0.95)"
+                      />
+                      <span className="sr-only">Recording audio levels</span>
+                    </div>
+                  ) : (
+                    <span>Record Session</span>
+                  )}
                 </Button>
 
                 <Button
