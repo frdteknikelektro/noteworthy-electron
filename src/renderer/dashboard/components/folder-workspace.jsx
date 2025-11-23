@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/renderer/components/ui/button";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@/renderer/components/ui/field";
 import { Input } from "@/renderer/components/ui/input";
 import {
@@ -13,12 +12,6 @@ import {
 } from "@/renderer/components/ui/select";
 import { useApp } from "@/renderer/app-provider";
 
-const SUMMARY_TYPE_OPTIONS = [
-  { value: "highlights", label: "Highlights" },
-  { value: "action-items", label: "Action items" },
-  { value: "decisions", label: "Decisions" }
-];
-
 const ICON_OPTIONS = [
   { value: "folder", label: "Folder" },
   { value: "calendar", label: "Calendar" },
@@ -26,20 +19,28 @@ const ICON_OPTIONS = [
   { value: "list-checks", label: "Checklist" }
 ];
 
+const ACCENT_COLOR_OPTIONS = [
+  { value: "#6366f1", label: "Indigo" },
+  { value: "#22c55e", label: "Emerald" },
+  { value: "#f97316", label: "Amber" },
+  { value: "#0ea5e9", label: "Sky" },
+  { value: "#ec4899", label: "Fuchsia" }
+];
+
 const DEFAULT_FORM = {
   name: "",
-  description: "",
   defaultInitialContext: "",
   defaultSummaryPrompt: "",
-  defaultSummaryType: SUMMARY_TYPE_OPTIONS[0].value,
   tags: "",
-  color: "#7c3aed",
+  color: ACCENT_COLOR_OPTIONS[0].value,
   icon: ICON_OPTIONS[0].value
 };
 
 export default function FolderWorkspace() {
-  const { activeFolder, updateFolder, deleteFolder } = useApp();
+  const { activeFolder, updateFolder } = useApp();
   const [form, setForm] = useState(() => ({ ...DEFAULT_FORM }));
+  const titleRef = useRef(null);
+  const previousFolderIdRef = useRef(null);
 
   useEffect(() => {
     if (!activeFolder) {
@@ -48,12 +49,10 @@ export default function FolderWorkspace() {
     }
     setForm({
       name: activeFolder.name || "",
-      description: activeFolder.description || "",
       defaultInitialContext: activeFolder.defaultInitialContext || "",
       defaultSummaryPrompt: activeFolder.defaultSummaryPrompt || "",
-      defaultSummaryType: activeFolder.defaultSummaryType || SUMMARY_TYPE_OPTIONS[0].value,
       tags: (activeFolder.tags || []).join(", "),
-      color: activeFolder.color || "#7c3aed",
+      color: activeFolder.color || ACCENT_COLOR_OPTIONS[0].value,
       icon: activeFolder.icon || "folder"
     });
   }, [activeFolder?.id]);
@@ -67,125 +66,139 @@ export default function FolderWorkspace() {
     [activeFolder?.id, updateFolder]
   );
 
-  const handleDelete = useCallback(() => {
-    if (!activeFolder?.id) return;
-    const confirmed = window.confirm(
-      `Delete folder "${activeFolder.name || "New Folder"}"? Notes will remain in All notes.`
-    );
-    if (!confirmed) return;
-    deleteFolder(activeFolder.id);
-  }, [activeFolder, deleteFolder]);
+  const handleNameInput = useCallback(
+    event => {
+      const value = event.currentTarget.textContent || "";
+      setForm(prev => ({ ...prev, name: value }));
+      if (!activeFolder?.id) return;
+      updateFolder(activeFolder.id, { name: value });
+    },
+    [activeFolder?.id, updateFolder]
+  );
+
+  useLayoutEffect(() => {
+    const titleElement = titleRef.current;
+    if (!titleElement) return;
+
+    const folderName = activeFolder?.name || "";
+    const currentFolderId = activeFolder?.id;
+
+    if (previousFolderIdRef.current !== currentFolderId) {
+      titleElement.textContent = folderName;
+      previousFolderIdRef.current = currentFolderId;
+      return;
+    }
+
+    if (document.activeElement === titleElement) return;
+
+    if (titleElement.textContent !== folderName) {
+      titleElement.textContent = folderName;
+    }
+  }, [activeFolder?.id, activeFolder?.name]);
 
   if (!activeFolder) return null;
 
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-background/80 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Folder workspace</p>
-          <p className="text-sm font-semibold text-foreground">Manage folder defaults</p>
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto pb-4 px-1 pt-1">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-1 flex-col gap-1">
+          <div
+            role="textbox"
+            aria-label="Folder name"
+            tabIndex={0}
+            className="folder-title text-2xl font-semibold leading-snug text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            contentEditable
+            suppressContentEditableWarning
+            spellCheck={false}
+            data-placeholder="New folder"
+            ref={titleRef}
+            onInput={handleNameInput}
+            onKeyDown={event => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.blur();
+              }
+            }}
+          />
         </div>
-        <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDelete}>
-          Delete folder
-        </Button>
       </div>
-      <Field>
-        <FieldLabel htmlFor="folder-edit-name">Name</FieldLabel>
-        <FieldContent className="!p-0">
-          <Input
-            id="folder-edit-name"
-            value={form.name}
-            onChange={event => handleFieldChange("name", event.target.value)}
-            placeholder="New Folder"
-          />
-        </FieldContent>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="folder-edit-description">Description</FieldLabel>
-        <FieldContent>
-          <textarea
-            id="folder-edit-description"
-            value={form.description}
-            onChange={event => handleFieldChange("description", event.target.value)}
-            className="min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        </FieldContent>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="folder-edit-initial-context">Default initial context</FieldLabel>
-        <FieldDescription>Prepopulate the initial context box for notes inside this folder.</FieldDescription>
-        <FieldContent>
-          <textarea
-            id="folder-edit-initial-context"
-            value={form.defaultInitialContext}
-            onChange={event => handleFieldChange("defaultInitialContext", event.target.value)}
-            className="min-h-[70px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        </FieldContent>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="folder-edit-summary-prompt">Default summary prompt</FieldLabel>
-        <FieldDescription>Override the summary textarea placeholder inside this folder.</FieldDescription>
-        <FieldContent>
-          <textarea
-            id="folder-edit-summary-prompt"
-            value={form.defaultSummaryPrompt}
-            onChange={event => handleFieldChange("defaultSummaryPrompt", event.target.value)}
-            className="min-h-[70px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        </FieldContent>
-      </Field>
-      <div className="grid gap-4 md:grid-cols-2">
+
+      <div className="space-y-5">
         <Field>
-          <FieldLabel htmlFor="folder-edit-summary-type">Default summary type</FieldLabel>
+          <FieldLabel htmlFor="folder-edit-initial-context">Default initial context</FieldLabel>
           <FieldContent>
-            <Select
-              id="folder-edit-summary-type"
-              value={form.defaultSummaryType}
-              onValueChange={value => handleFieldChange("defaultSummaryType", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Choose type" />
-              </SelectTrigger>
-              <SelectContent>
-                {SUMMARY_TYPE_OPTIONS.map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldContent>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="folder-edit-tags">Tags</FieldLabel>
-          <FieldDescription>Comma-separated labels displayed in the sidebar.</FieldDescription>
-          <FieldContent>
-            <Input
-              id="folder-edit-tags"
-              value={form.tags}
-              onChange={event => handleFieldChange("tags", event.target.value)}
-              placeholder="Standups, Engineering"
+            <textarea
+              id="folder-edit-initial-context"
+              value={form.defaultInitialContext}
+              onChange={event => handleFieldChange("defaultInitialContext", event.target.value)}
+              className="min-h-[70px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </FieldContent>
+          <FieldDescription>
+            Prepopulate the initial context box for notes inside this folder. Default initial context will be used for new notes.
+          </FieldDescription>
         </Field>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2">
+
         <Field>
-          <FieldLabel htmlFor="folder-edit-color">Accent color</FieldLabel>
+          <FieldLabel htmlFor="folder-edit-summary-prompt">Default summary prompt</FieldLabel>
           <FieldContent>
-            <input
-              id="folder-edit-color"
-              type="color"
-              value={form.color}
-              onChange={event => handleFieldChange("color", event.target.value)}
-              className="h-10 w-10 cursor-pointer rounded-md border border-input p-0"
+            <textarea
+              id="folder-edit-summary-prompt"
+              value={form.defaultSummaryPrompt}
+              onChange={event => handleFieldChange("defaultSummaryPrompt", event.target.value)}
+              className="min-h-[70px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </FieldContent>
+          <FieldDescription>Override the summary textarea placeholder inside this folder.</FieldDescription>
         </Field>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="folder-edit-tags">Tags</FieldLabel>
+            <FieldContent>
+              <Input
+                id="folder-edit-tags"
+                value={form.tags}
+                onChange={event => handleFieldChange("tags", event.target.value)}
+                placeholder="Standups, Engineering"
+              />
+            </FieldContent>
+            <FieldDescription>Comma-separated labels displayed in the sidebar.</FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="folder-edit-color">Accent color</FieldLabel>
+            <FieldContent>
+              <Select
+                id="folder-edit-color"
+                value={form.color}
+                onValueChange={value => handleFieldChange("color", value)}
+              >
+                <SelectTrigger className="flex items-center justify-between">
+                  <SelectValue placeholder="Pick accent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACCENT_COLOR_OPTIONS.map(option => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-4 w-4 rounded-full border border-input shadow-sm"
+                          style={{ backgroundColor: option.value }}
+                        />
+                        <span>{option.label}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+        </div>
+
         <Field>
           <FieldLabel htmlFor="folder-edit-icon">Icon</FieldLabel>
-          <FieldDescription>Choose a visual anchor for the folder.</FieldDescription>
           <FieldContent>
             <Select
               id="folder-edit-icon"
@@ -204,8 +217,9 @@ export default function FolderWorkspace() {
               </SelectContent>
             </Select>
           </FieldContent>
+          <FieldDescription>Choose a visual anchor for the folder.</FieldDescription>
         </Field>
       </div>
-    </section>
+    </div>
   );
 }

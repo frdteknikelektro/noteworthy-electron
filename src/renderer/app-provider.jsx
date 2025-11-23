@@ -581,6 +581,16 @@ export function AppProvider({ children }) {
     [updateNote]
   );
 
+  const assignNoteFolder = useCallback(
+    (noteId, folderId) => {
+      if (!noteId) return;
+      const normalizedFolderId = folderId || null;
+      updateNote(noteId, { folderId: normalizedFolderId });
+      setActiveFolderId(normalizedFolderId);
+    },
+    [updateNote]
+  );
+
   const archiveNote = useCallback(noteId => {
     if (!noteId) return;
     const timestamp = new Date().toISOString();
@@ -728,6 +738,7 @@ export function AppProvider({ children }) {
       updateNoteTitle,
       updateNoteHighlights,
       updateNoteInitialContext,
+      assignNoteFolder,
       addManualEntry,
       addInitialEntry,
       archiveNote,
@@ -767,6 +778,7 @@ export function AppProvider({ children }) {
       updateNoteTitle,
       updateNoteHighlights,
       updateNoteInitialContext,
+      assignNoteFolder,
       addManualEntry,
       addInitialEntry,
       archiveNote,

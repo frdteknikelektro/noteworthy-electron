@@ -24,10 +24,10 @@ export default function Dashboard() {
               ) : showNoteWorkspace ? (
                 <NoteWorkspace />
               ) : (
-                <section className="flex h-full flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-background/80 p-6 text-center">
+                <section className="flex flex-1 flex-col items-center justify-center gap-2 bg-background/80 px-6 py-8 text-center">
                   <p className="text-lg font-semibold text-foreground">No note selected</p>
                   <p className="text-sm text-muted-foreground">
-                    Choose a note from the history or create a folder/note to get started.
+                    Choose a note from the sidebar or create a new one to begin capturing.
                   </p>
                 </section>
               )}

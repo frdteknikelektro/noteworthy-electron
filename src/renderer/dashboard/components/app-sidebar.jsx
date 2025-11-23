@@ -35,6 +35,7 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
     createNote,
     openSettings,
     deleteNote,
+    deleteFolder,
     folders,
     activeFolder,
     activeFolderId,
@@ -64,6 +65,18 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
     const confirmed = window.confirm(`Delete "${name}" and all associated transcript content? This cannot be undone.`);
     if (!confirmed) return;
     deleteNote(note.id);
+  };
+
+  const handleDeleteFolder = folder => {
+    if (!folder?.id) return;
+    if (isCapturing) {
+      alert("Stop capture before switching folders.");
+      return;
+    }
+    const name = folder.name?.trim() || "New Folder";
+    const confirmed = window.confirm(`Delete folder "${name}"? Notes will remain in All notes.`);
+    if (!confirmed) return;
+    deleteFolder(folder.id);
   };
 
   const handleSelectFolder = folderId => {
@@ -148,6 +161,27 @@ export function AppSidebar({ variant = "sidebar", className, ...props }) {
                           </span>
                         </div>
                       </SidebarMenuButton>
+                      <div className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center group-data-[collapsible=icon]:hidden">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              type="button"
+                              className="h-8 w-8 p-0"
+                              aria-label={`Open folder actions for ${folder.name || "folder"}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => handleDeleteFolder(folder)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                              <span>Delete folder</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </SidebarMenuItem>
                   );
                 })}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, CalendarDays, CircleDot, Mic, MicOff, StopCircle } from "lucide-react";
+import {ArrowUp, CalendarDays, CircleDot, Folder, Mic, MicOff, StopCircle} from "lucide-react";
 import { LiveAudioVisualizer } from "react-audio-visualize";
 
 import { useApp } from "@/renderer/app-provider";
@@ -10,6 +10,13 @@ import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
 import { Input } from "@/renderer/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/renderer/components/ui/select";
 import { cn } from "@/renderer/lib/utils";
 import { buildTranscriptSnippet } from "@/renderer/lib/transcript";
 
@@ -27,6 +34,8 @@ const SOURCE_BUBBLE_CLASSES = {
   initial: "bg-secondary/10 text-secondary-foreground"
 };
 
+const UNASSIGNED_FOLDER_VALUE = "__unassigned";
+
 function formatTimestamp(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -43,6 +52,8 @@ export function NoteWorkspace() {
     addInitialEntry,
     updateTranscriptEntry,
     updateNoteInitialContext,
+    assignNoteFolder,
+    folders,
     themeMode,
     systemPrefersDark
   } = useApp();
@@ -74,6 +85,7 @@ export function NoteWorkspace() {
   );
 
   const createdTimestamp = useMemo(() => formatTimestamp(activeNote?.createdAt), [activeNote?.createdAt]);
+  const folderSelectionValue = activeNote?.folderId ?? UNASSIGNED_FOLDER_VALUE;
 
   const storedSummaries = activeNote?.summaries || [];
 
@@ -97,6 +109,14 @@ export function NoteWorkspace() {
   useEffect(() => {
     setInitialContextInput(activeNote?.initialContext || "");
   }, [activeNote?.id, activeNote?.initialContext]);
+
+  const handleFolderChange = useCallback(
+    value => {
+      if (!activeNote?.id) return;
+      assignNoteFolder(activeNote.id, value === UNASSIGNED_FOLDER_VALUE ? null : value);
+    },
+    [activeNote?.id, assignNoteFolder]
+  );
 
   const chatMessages = useMemo(
     () =>
@@ -287,12 +307,46 @@ export function NoteWorkspace() {
               }
             }}
           ></div>
-          {createdTimestamp && (
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <CalendarDays className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-              <span>Created {createdTimestamp}</span>
-            </p>
-          )}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {createdTimestamp && (
+                <p className="flex items-center gap-1">
+                  <CalendarDays className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                  <span>Created {createdTimestamp}</span>
+                </p>
+              )}
+              <div>·</div>
+              <div className="flex items-center gap-1">
+                <Folder className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                <Select
+                  value={folderSelectionValue}
+                  onValueChange={handleFolderChange}
+                  aria-label="Assign folder"
+                >
+                  <SelectTrigger className="inline-flex h-auto border-0 shadow-none items-center gap-1 px-1 py-0 text-xs font-semibold text-muted-foreground transition hover:text-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_FOLDER_VALUE}>
+                      <div className="flex items-center gap-2">
+                        <span>Unassigned</span>
+                      </div>
+                    </SelectItem>
+                    {folders.map(folder => (
+                      <SelectItem
+                        key={folder.id}
+                        value={folder.id}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{folder.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -324,7 +378,7 @@ export function NoteWorkspace() {
                     <div className="flex flex-col gap-2 text-xs items-end w-full">
                       <div
                         className={cn(
-                          "w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground border-border/40",
+                          "w-full rounded-sm border px-4 py-3 text-sm leading-relaxed text-foreground border-border/40",
                           SOURCE_BUBBLE_CLASSES.initial
                         )}
                       >
@@ -358,7 +412,7 @@ export function NoteWorkspace() {
                         >
                           <div
                             className={cn(
-                              "max-w-[92%] px-2 py-1 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
+                              "max-w-[92%] px-3 py-2 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
                               SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
                               alignRight && "ml-auto border-border/40"
                             )}
