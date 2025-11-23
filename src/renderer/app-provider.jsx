@@ -231,7 +231,7 @@ export function AppProvider({ children }) {
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark());
 
   const activeNote = useMemo(
-    () => notes.find(note => note.id === activeNoteId) || notes[0] || null,
+    () => notes.find(note => note.id === activeNoteId) || null,
     [activeNoteId, notes]
   );
 
@@ -240,18 +240,47 @@ export function AppProvider({ children }) {
     [folders, activeFolderId]
   );
 
+  const sortedNotes = useMemo(() => {
+    return [...notes].sort((a, b) => {
+      const aTimestamp = new Date(a.updatedAt || a.createdAt).getTime() || 0;
+      const bTimestamp = new Date(b.updatedAt || b.createdAt).getTime() || 0;
+      return bTimestamp - aTimestamp;
+    });
+  }, [notes]);
+
+  const scopedNotes = useMemo(() => {
+    if (!activeFolderId) return sortedNotes;
+    return sortedNotes.filter(note => note.folderId === activeFolderId);
+  }, [sortedNotes, activeFolderId]);
+
   useEffect(() => {
     if (notes.length === 0) {
-      const note = createFreshNote();
-      setNotes([note]);
-      setActiveNoteId(note.id);
+      if (activeNoteId !== null) {
+        setActiveNoteId(null);
+      }
       return;
     }
-    if (activeNoteId && notes.some(note => note.id === activeNoteId)) {
+
+    if (activeFolderId) {
+      if (scopedNotes.length > 0) {
+        const activeIsScoped = scopedNotes.some(note => note.id === activeNoteId);
+        if (!activeIsScoped) {
+          setActiveNoteId(scopedNotes[0].id);
+        }
+      } else if (activeNoteId !== null) {
+        setActiveNoteId(null);
+      }
       return;
     }
-    setActiveNoteId(notes[0]?.id || null);
-  }, [notes, activeNoteId]);
+
+    const hasActive = notes.some(note => note.id === activeNoteId);
+    if (!hasActive) {
+      const fallbackId = sortedNotes[0]?.id ?? null;
+      if (activeNoteId !== fallbackId) {
+        setActiveNoteId(fallbackId);
+      }
+    }
+  }, [notes, activeNoteId, activeFolderId, scopedNotes, sortedNotes]);
 
   useEffect(() => {
     if (!activeFolderId) return;
@@ -539,12 +568,8 @@ export function AppProvider({ children }) {
 
   const filteredNotes = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    const scopedNotes = activeFolderId ? notes.filter(note => note.folderId === activeFolderId) : notes;
-    const sorted = [...scopedNotes].sort(
-      (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
-    );
-    if (!term) return sorted;
-    return sorted.filter(note => {
+    if (!term) return scopedNotes;
+    return scopedNotes.filter(note => {
       const haystack = [
         note.title || "",
         note.highlightsHtml || "",
@@ -554,7 +579,7 @@ export function AppProvider({ children }) {
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [notes, searchTerm, activeFolderId]);
+  }, [scopedNotes, searchTerm]);
 
   const generateSummary = useCallback(
     async (noteId, promptText, transcriptSnippet) => {

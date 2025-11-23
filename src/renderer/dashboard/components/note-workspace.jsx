@@ -250,6 +250,17 @@ export function NoteWorkspace() {
     void startCapture();
   }, [isCapturing, startCapture, stopCapture, submitInitialContextEntry]);
 
+  if (!activeNote) {
+    return (
+      <section className="flex flex-1 flex-col items-center justify-center gap-2 bg-background/80 px-6 py-8 text-center">
+        <p className="text-lg font-semibold text-foreground">No note selected</p>
+        <p className="text-sm text-muted-foreground">
+          Choose a note from the sidebar or create a new one to begin capturing.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 h-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
