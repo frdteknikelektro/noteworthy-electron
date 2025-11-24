@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {ArrowUp, CalendarDays, CircleDot, Folder, Mic, MicOff, StopCircle, Upload} from "lucide-react";
+import {ArrowUp, CalendarDays, CircleDot, Folder, Mic, MicOff, StopCircle, Trash, Upload} from "lucide-react";
 import { LiveAudioVisualizer } from "react-audio-visualize";
 
 import { useApp } from "@/renderer/app-provider";
@@ -54,6 +54,23 @@ function formatTimestamp(value) {
   return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
 }
 
+function formatDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return "";
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  }
+  return `${seconds}s`;
+}
+
+function buildFileUrl(filePath) {
+  if (!filePath) return "";
+  const normalized = filePath.replace(/\\/g, "/");
+  return encodeURI(`file://${normalized}`);
+}
+
 export function NoteWorkspace() {
   const {
     activeNote,
@@ -67,6 +84,11 @@ export function NoteWorkspace() {
     appendTranscriptEntry,
     preferences,
     folders,
+    recordings,
+    activeFolderId,
+    activeFolder,
+    updateRecording,
+    deleteRecording,
     themeMode,
     systemPrefersDark
   } = useApp();
@@ -108,6 +130,61 @@ export function NoteWorkspace() {
     () => [...draftEntries, ...noteEntries],
     [draftEntries, noteEntries]
   );
+
+  const filteredRecordings = useMemo(() => {
+    if (!recordings?.length) return [];
+    if (activeNote?.id) {
+      return recordings.filter(recording => recording.noteId === activeNote.id);
+    }
+    if (activeFolderId) {
+      return recordings.filter(recording => recording.folderId === activeFolderId);
+    }
+    return recordings;
+  }, [recordings, activeNote?.id, activeFolderId]);
+
+  const sortedRecordings = useMemo(() => {
+    return [...filteredRecordings].sort((a, b) => {
+      const aTime = new Date(a.createdAt).getTime() || 0;
+      const bTime = new Date(b.createdAt).getTime() || 0;
+      return bTime - aTime;
+    });
+  }, [filteredRecordings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const checker = window?.electronAPI?.checkRecordingFile;
+    if (typeof checker !== "function") return;
+    const pending = sortedRecordings.filter(
+      recording =>
+        recording.filePath &&
+        !recording.processing &&
+        !recording.fileVerifiedAt
+    );
+    if (pending.length === 0) return;
+    let cancelled = false;
+    pending.forEach(recording => {
+      checker(recording.filePath).then(exists => {
+        if (cancelled) return;
+        updateRecording(recording.id, {
+          fileMissing: !exists,
+          fileVerifiedAt: new Date().toISOString()
+        });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sortedRecordings, updateRecording]);
+
+  const recordingsScopeLabel = useMemo(() => {
+    if (activeNote) {
+      return `Recordings for ${activeNote.title || "this note"}`;
+    }
+    if (activeFolder) {
+      return `Recordings for folder ${activeFolder.name}`;
+    }
+    return "All recordings";
+  }, [activeNote, activeFolder]);
 
   const createdTimestamp = useMemo(() => formatTimestamp(activeNote?.createdAt), [activeNote?.createdAt]);
   const folderSelectionValue = activeNote?.folderId ?? UNASSIGNED_FOLDER_VALUE;
@@ -382,6 +459,26 @@ export function NoteWorkspace() {
     void startCapture();
   }, [isCapturing, startCapture, stopCapture, submitInitialContextEntry]);
 
+  const revealRecordingDirectory = useCallback(directory => {
+    if (!directory) return;
+    window?.electronAPI?.revealRecordingDirectory?.(directory);
+  }, []);
+
+  const handleDeleteRecording = useCallback(
+    recording => {
+      if (!recording?.id) return;
+      if (typeof window === "undefined") return;
+      const titleLabel = recording.title || "recording";
+      const timestampLabel = formatTimestamp(recording.createdAt) || "this file";
+      const confirmed = window.confirm(
+        `Delete "${titleLabel}" (${timestampLabel})? This will remove the MP3 export permanently.`
+      );
+      if (!confirmed) return;
+      deleteRecording(recording);
+    },
+    [deleteRecording]
+  );
+
   if (!activeNote) {
     return (
       <section className="flex flex-1 flex-col items-center justify-center gap-2 bg-background/80 px-6 py-8 text-center">
@@ -473,6 +570,15 @@ export function NoteWorkspace() {
                 className="flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/30"
               >
                 {storedSummaries.length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="files" className="gap-1">
+              Files{" "}
+              <Badge
+                variant="secondary"
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/30 text-[0.6rem]"
+              >
+                {filteredRecordings.length}
               </Badge>
             </TabsTrigger>
           </TabsList>
@@ -735,6 +841,112 @@ export function NoteWorkspace() {
                   ))
                 )}
               </div>
+            </div>
+          </TabsContent>
+          <TabsContent value="files" className="flex flex-1 flex-col gap-5 mt-0 overflow-hidden">
+            <div className="flex flex-col gap-5 overflow-y-auto px-1 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs uppercase text-muted-foreground">{recordingsScopeLabel}</p>
+                <span className="text-xs text-muted-foreground">
+                  {sortedRecordings.length} recording{sortedRecordings.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {sortedRecordings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Record a session to see MP3 exports, playback, and reveal links in this tab.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {sortedRecordings.map(recording => {
+                    const folder = folders.find(folderItem => folderItem.id === recording.folderId);
+                    const audioSrc = buildFileUrl(recording.filePath);
+                    return (
+                      <article
+                        key={recording.id}
+                        className="space-y-3 rounded-xl border border-border bg-background/80 p-4 shadow-sm"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-foreground">{recording.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatTimestamp(recording.createdAt)}
+                              {recording.durationMs ? ` · ${formatDuration(recording.durationMs)}` : ""}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {folder && (
+                              <Badge variant="outline" className="text-[0.6rem] uppercase">
+                                {folder.name}
+                              </Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="flex items-center gap-1 text-destructive"
+                              onClick={() => handleDeleteRecording(recording)}
+                            >
+                              <Trash className="h-3 w-3" aria-hidden="true" />
+                              <span>Delete</span>
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {recording.processing && (
+                            <Badge variant="secondary" className="text-[0.6rem] uppercase">
+                              Processing…
+                            </Badge>
+                          )}
+                          {recording.fileMissing && !recording.processing && (
+                            <Badge variant="destructive" className="text-[0.6rem] uppercase">
+                              File missing
+                            </Badge>
+                          )}
+                        </div>
+                        {audioSrc && !recording.fileMissing ? (
+                          <audio
+                            controls
+                            preload="metadata"
+                            className="w-full rounded border border-border"
+                            src={audioSrc}
+                          />
+                        ) : (
+                          <div className="text-xs text-muted-foreground">
+                            {recording.fileMissing
+                              ? "The MP3 file is missing on disk."
+                              : "Processing MP3 export…"}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {audioSrc && !recording.processing && !recording.fileMissing ? (
+                            <Button size="sm" variant="outline" asChild>
+                              <a href={audioSrc} download={`recording-${recording.id}.mp3`}>
+                                Download MP3
+                              </a>
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" disabled>
+                              Download MP3
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => revealRecordingDirectory(recording.directoryPath)}
+                            disabled={
+                              !recording.directoryPath || recording.processing || recording.fileMissing
+                            }
+                          >
+                            Reveal folder
+                          </Button>
+                        </div>
+                        {recording.error && (
+                          <p className="text-xs text-destructive">{recording.error}</p>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>

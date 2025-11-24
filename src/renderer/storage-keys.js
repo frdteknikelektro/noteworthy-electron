@@ -5,3 +5,4 @@ export const MODEL_STORAGE_KEY = 'noteworthy.model.v1';
 export const MIC_DEVICE_STORAGE_KEY = 'noteworthy.mic-device.v1';
 export const FOLDERS_STORAGE_KEY = 'noteworthy.folders.v1';
 export const ACTIVE_FOLDER_STORAGE_KEY = 'noteworthy.active-folder';
+export const RECORDINGS_STORAGE_KEY = 'noteworthy.recordings.v1';

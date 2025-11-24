@@ -108,6 +108,11 @@ export class WavRecorder {
     this.audioChunks = [];
     this.isRecording = false;
     this.combinedStream = null;
+    this.onRecordingComplete = null;
+  }
+
+  setOnRecordingComplete(handler) {
+    this.onRecordingComplete = typeof handler === "function" ? handler : null;
   }
 
   async startRecording(microphoneStream, systemAudioStream) {
@@ -152,22 +157,38 @@ export class WavRecorder {
   async saveRecording() {
     if (this.audioChunks.length === 0) return;
 
+    let audioContext = null;
     try {
-      const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+      const audioBlob = new Blob(this.audioChunks, { type: "audio/webm" });
       const arrayBuffer = await audioBlob.arrayBuffer();
-      const audioContext = new AudioContext();
+      audioContext = new AudioContext();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const wavBlob = this.audioBufferToWav(audioBuffer);
-      const url = URL.createObjectURL(wavBlob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `noteworthy-recording-${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
+      const durationMs = audioBuffer.duration * 1000;
+      const sampleRate = audioBuffer.sampleRate;
+      const channels = audioBuffer.numberOfChannels;
+      const channelData = [];
+      for (let i = 0; i < channels; i += 1) {
+        channelData.push(audioBuffer.getChannelData(i).slice());
+      }
+      if (typeof this.onRecordingComplete === "function") {
+        this.onRecordingComplete({
+          durationMs,
+          sampleRate,
+          channels,
+          channelData
+        });
+      }
     } catch (error) {
-      console.error('Error saving WAV recording:', error);
+      console.error("Error saving WAV recording:", error);
+    } finally {
+      if (audioContext) {
+        try {
+          await audioContext.close();
+        } catch {
+          // Ignore close errors
+        }
+      }
+      this.audioChunks = [];
     }
   }
 

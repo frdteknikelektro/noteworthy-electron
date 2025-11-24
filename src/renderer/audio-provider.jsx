@@ -11,6 +11,8 @@ import {
 } from "react";
 import { Session, WavRecorder } from "./lib/audio";
 import { MIC_DEVICE_STORAGE_KEY } from "./storage-keys";
+import { buildTranscriptSnippet } from "./lib/transcript";
+import { generateId } from "./lib/id";
 
 const AudioContext = createContext(null);
 
@@ -18,6 +20,32 @@ const STREAM_META = {
   microphone: { statusId: "microphone", messageSource: "microphone", errorLabel: "microphone" },
   system_audio: { statusId: "speaker", messageSource: "speaker", errorLabel: "system audio" }
 };
+
+const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
+
+function sanitizeForFileName(value = "", fallback = "Untitled note") {
+  const normalized = (value || fallback).trim().replace(INVALID_FILENAME_CHARS, "-");
+  const collapsed = normalized.replace(/\s+/g, " ").trim();
+  const truncated = collapsed.substring(0, 120);
+  return truncated || fallback;
+}
+
+function formatTimestampForName(value) {
+  const date = value ? new Date(value) : new Date();
+  const fallback = new Date();
+  const validDate = date instanceof Date && !Number.isNaN(date.getTime()) ? date : fallback;
+  return validDate.toISOString().replace(/[:.]/g, "-");
+}
+
+function buildSessionFolderName(timestamp, title) {
+  const safeTimestamp = formatTimestampForName(timestamp);
+  const safeTitle = sanitizeForFileName(title);
+  return `${safeTimestamp} - ${safeTitle}`.trim();
+}
+
+function buildRecordingFileName(timestamp) {
+  return `recording-${formatTimestampForName(timestamp)}.mp3`;
+}
 
 function loadStoredMicDevice() {
   if (typeof window === "undefined") return "";
@@ -45,7 +73,9 @@ export function AudioProvider({
   activeNote,
   preferences,
   model,
-  onAppendTranscriptEntry
+  onAppendTranscriptEntry,
+  onRegisterRecording,
+  onUpdateRecording
 }) {
   const [micDeviceId, setMicDeviceId] = useState(() => loadStoredMicDevice());
   const [micDevices, setMicDevices] = useState([]);
@@ -63,6 +93,7 @@ export function AudioProvider({
   const wavRecorderRef = useRef(new WavRecorder());
   const prevMicDeviceRef = useRef(micDeviceId);
   const prevSystemAudioRef = useRef(systemAudioEnabled);
+  const recordingNoteRef = useRef(activeNote);
 
   const updateStatus = useCallback((statusId, connected) => {
     setStreamStatus(prev => ({ ...prev, [statusId]: connected }));
@@ -122,6 +153,126 @@ export function AudioProvider({
     setIsCapturing(false);
   }, []);
 
+  const handleRecordingComplete = useCallback(
+    async ({ channelData, sampleRate, channels, durationMs }) => {
+      const recordingNote = recordingNoteRef.current;
+      if (!recordingNote || !onRegisterRecording || !onUpdateRecording) return;
+      recordingNoteRef.current = null;
+
+      const createdAt = new Date().toISOString();
+      const recordingId = generateId("recording");
+      const snippet = buildTranscriptSnippet(recordingNote, {});
+      const metadata = {
+        id: recordingId,
+        noteId: recordingNote.id,
+        title: recordingNote.title || "Untitled note",
+        folderId: recordingNote.folderId || null,
+        createdAt,
+        durationMs: typeof durationMs === "number" ? durationMs : 0,
+        transcriptSnippet: snippet,
+        filePath: "",
+        directoryPath: "",
+        processing: true,
+        fileMissing: false,
+        fileVerifiedAt: "",
+        error: ""
+      };
+      onRegisterRecording(metadata);
+
+      const directoryName = buildSessionFolderName(createdAt, recordingNote.title);
+      const fileName = buildRecordingFileName(createdAt);
+      const saveRecording = window?.electronAPI?.saveRecording;
+      if (!saveRecording) {
+        onUpdateRecording(recordingId, {
+          processing: false,
+          error: "Unable to save recording: IPC helper unavailable"
+        });
+        return;
+      }
+
+      let worker = null;
+      try {
+        worker = new Worker(new URL("./workers/mp3-worker.js", import.meta.url), { type: "module" });
+      } catch (error) {
+        console.error("Failed to start MP3 worker:", error);
+        onUpdateRecording(recordingId, {
+          processing: false,
+          error: error?.message || "Unable to start MP3 encoder"
+        });
+        return;
+      }
+
+      const cleanUp = () => {
+        if (worker) {
+          worker.terminate();
+          worker = null;
+        }
+      };
+
+      worker.onmessage = async event => {
+        const { data } = event;
+        if (!data) return;
+        if (data.type === "progress") {
+          return;
+        }
+        if (data.type === "result") {
+          try {
+            const saved = await saveRecording({
+              directoryName,
+              fileName,
+              mp3Buffer: data.mp3Buffer
+            });
+            onUpdateRecording(recordingId, {
+              filePath: saved?.filePath || "",
+              directoryPath: saved?.directoryPath || "",
+              processing: false,
+              error: "",
+              fileMissing: false,
+              fileVerifiedAt: ""
+            });
+          } catch (saveError) {
+            console.error("Failed to persist recording:", saveError);
+            onUpdateRecording(recordingId, {
+              processing: false,
+              error: saveError?.message || "Unable to persist recording"
+            });
+          } finally {
+            cleanUp();
+          }
+          return;
+        }
+        if (data.type === "error") {
+          onUpdateRecording(recordingId, {
+            processing: false,
+            error: data.message || "Encoding failed"
+          });
+          cleanUp();
+        }
+      };
+
+      worker.onerror = event => {
+        console.error("MP3 worker error:", event?.message);
+        onUpdateRecording(recordingId, {
+          processing: false,
+          error: event?.message || "MP3 encoding error"
+        });
+        cleanUp();
+      };
+
+      const transferable = (channelData || []).map(channel => channel.buffer);
+      worker.postMessage(
+        {
+          id: recordingId,
+          sampleRate,
+          channels,
+          pcmChannels: channelData || []
+        },
+        transferable
+      );
+    },
+    [onRegisterRecording, onUpdateRecording]
+  );
+
   useEffect(() => {
     const handler = () => {
       if (isCapturing) {
@@ -132,6 +283,14 @@ export function AudioProvider({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isCapturing, stopCapture]);
+
+  useEffect(() => {
+    const recorder = wavRecorderRef.current;
+    recorder.setOnRecordingComplete(handleRecordingComplete);
+    return () => {
+      recorder.setOnRecordingComplete(null);
+    };
+  }, [handleRecordingComplete]);
 
   const handleCaptureError = useCallback(
     (error, label) => {
@@ -227,8 +386,9 @@ export function AudioProvider({
       language: preferences?.language
     };
     const turnDetection = {
-      type: "semantic_vad",
-      eagerness: "low" // "auto"
+      type: "server_vad",
+      threshold: 0.25,
+      silence_duration_ms: 1000,
     };
     const config = {
       input_audio_noise_reduction: {
@@ -269,6 +429,7 @@ export function AudioProvider({
   const startCapture = useCallback(
     async () => {
       if (!ensureCapturePreconditions()) return;
+      recordingNoteRef.current = activeNote;
       setIsCapturing(true);
       try {
         const streams = await captureMediaStreams();

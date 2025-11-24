@@ -34,6 +34,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.0",
     "electron-audio-loopback": "^1.0.5",
+    "node-lame": "^1.5.1",
     "lucide-react": "^0.553.0",
     "react": "^18.3.0",
     "react-audio-visualize": "^1.2.0",

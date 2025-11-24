@@ -9,7 +9,8 @@ import {
   MODEL_STORAGE_KEY,
   FOLDERS_STORAGE_KEY,
   ACTIVE_FOLDER_STORAGE_KEY,
-  MIC_DEVICE_STORAGE_KEY
+  MIC_DEVICE_STORAGE_KEY,
+  RECORDINGS_STORAGE_KEY
 } from "./storage-keys";
 import {
   DEFAULT_PREFERENCES,
@@ -19,15 +20,9 @@ import {
   THEME_STORAGE_KEY
 } from "./settings/constants";
 import { buildTranscriptSnippet } from "./lib/transcript";
+import { generateId } from "./lib/id";
 
 const AppContext = createContext(null);
-
-export function generateId(prefix = "entry") {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-}
 
 function createFreshNote({ folderId = null, initialContext = "", title } = {}) {
   const now = new Date().toISOString();
@@ -116,6 +111,41 @@ function normalizeStoredFolder(folder) {
     icon: typeof folder.icon === "string" && folder.icon.trim() ? folder.icon : "folder",
     createdAt: folder.createdAt || now
   };
+}
+
+function normalizeStoredRecording(recording) {
+  const now = new Date().toISOString();
+  const source = recording || {};
+  return {
+    id: source.id || generateId("recording"),
+    noteId: typeof source.noteId === "string" ? source.noteId : null,
+    title: typeof source.title === "string" && source.title.trim().length ? source.title.trim() : "Untitled recording",
+    folderId: typeof source.folderId === "string" ? source.folderId : null,
+    createdAt: source.createdAt || now,
+    durationMs: typeof source.durationMs === "number" ? source.durationMs : 0,
+    transcriptSnippet: typeof source.transcriptSnippet === "string" ? source.transcriptSnippet : "",
+    filePath: typeof source.filePath === "string" ? source.filePath : "",
+    directoryPath: typeof source.directoryPath === "string" ? source.directoryPath : "",
+    processing: Boolean(source.processing),
+    fileMissing: Boolean(source.fileMissing),
+    fileVerifiedAt: typeof source.fileVerifiedAt === "string" ? source.fileVerifiedAt : "",
+    error: typeof source.error === "string" ? source.error : ""
+  };
+}
+
+function initRecordingsState() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const storedRaw = localStorage.getItem(RECORDINGS_STORAGE_KEY);
+    const parsed = storedRaw ? JSON.parse(storedRaw) : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeStoredRecording) : [];
+  } catch (error) {
+    console.warn("Unable to hydrate recordings:", error);
+    return [];
+  }
 }
 
 function initNotesState() {
@@ -227,6 +257,7 @@ export function AppProvider({ children }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [preferences, setPreferences] = useState(() => loadPreferencesState());
   const [model, setModel] = useState(() => loadStoredModel());
+  const [recordings, setRecordings] = useState(() => initRecordingsState());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themeMode, setThemeMode] = useState(() => loadStoredThemeMode());
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark());
@@ -340,6 +371,11 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    localStorage.setItem(RECORDINGS_STORAGE_KEY, JSON.stringify(recordings));
+  }, [recordings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const tone = resolveThemeTone(themeMode, systemPrefersDark);
     const root = document.documentElement;
     root.dataset.theme = tone;
@@ -431,6 +467,32 @@ export function AppProvider({ children }) {
     },
     [activeNoteId]
   );
+
+  const registerRecording = useCallback(recording => {
+    if (!recording) return;
+    setRecordings(prev => [recording, ...prev]);
+  }, []);
+
+  const updateRecording = useCallback((id, updates) => {
+    if (!id || !updates) return;
+    setRecordings(prev =>
+      prev.map(recording => (recording.id === id ? { ...recording, ...updates } : recording))
+    );
+  }, []);
+
+  const deleteRecording = useCallback(async recording => {
+    if (!recording?.id) return;
+    setRecordings(prev => prev.filter(item => item.id !== recording.id));
+    if (!recording.filePath) return;
+    if (typeof window === "undefined") return;
+    const deleteFile = window?.electronAPI?.deleteRecordingFile;
+    if (!deleteFile) return;
+    try {
+      await deleteFile(recording.filePath);
+    } catch (error) {
+      console.error("Failed to delete recording file:", error);
+    }
+  }, []);
 
   const updateTranscriptEntry = useCallback(
     (noteId, entryId, text) => {
@@ -728,6 +790,7 @@ export function AppProvider({ children }) {
         ACTIVE_FOLDER_STORAGE_KEY,
         SETTINGS_STORAGE_KEY,
         MODEL_STORAGE_KEY,
+        RECORDINGS_STORAGE_KEY,
         THEME_STORAGE_KEY,
         MIC_DEVICE_STORAGE_KEY
       ].forEach(key => window.localStorage.removeItem(key));
@@ -735,6 +798,7 @@ export function AppProvider({ children }) {
     setNotes([freshNote]);
     setActiveNoteId(freshNote.id);
     setFolders([]);
+    setRecordings([]);
     setActiveFolderId(null);
     setFolderWorkspaceOpen(false);
     setSearchTerm("");
@@ -753,6 +817,7 @@ export function AppProvider({ children }) {
       filteredNotes,
       searchTerm,
       folders,
+      recordings,
       activeFolderId,
       activeFolder,
       folderWorkspaceOpen,
@@ -771,6 +836,9 @@ export function AppProvider({ children }) {
       updateNoteInitialContext,
       assignNoteFolder,
       appendTranscriptEntry,
+      registerRecording,
+      updateRecording,
+      deleteRecording,
       addManualEntry,
       addInitialEntry,
       archiveNote,
@@ -798,6 +866,7 @@ export function AppProvider({ children }) {
       filteredNotes,
       searchTerm,
       folders,
+      recordings,
       activeFolderId,
       activeFolder,
       folderWorkspaceOpen,
@@ -821,6 +890,9 @@ export function AppProvider({ children }) {
       deleteNote,
       updateFolder,
       deleteFolder,
+      registerRecording,
+      updateRecording,
+      deleteRecording,
       preferences,
       handleLanguageChange,
       model,
@@ -844,6 +916,8 @@ export function AppProvider({ children }) {
         model={model}
         preferences={preferences}
         onAppendTranscriptEntry={appendTranscriptEntry}
+        onRegisterRecording={registerRecording}
+        onUpdateRecording={updateRecording}
       >
         {children}
       </AudioProvider>
