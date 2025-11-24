@@ -1,13 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {ArrowUp, CalendarDays, CircleDot, Folder, Mic, MicOff, StopCircle} from "lucide-react";
+import {ArrowUp, CalendarDays, CircleDot, Folder, Mic, MicOff, StopCircle, Upload} from "lucide-react";
 import { LiveAudioVisualizer } from "react-audio-visualize";
 
 import { useApp } from "@/renderer/app-provider";
 import { useAudio } from "@/renderer/audio-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/renderer/components/ui/dialog";
+import { Progress } from "@/renderer/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
 import { Input } from "@/renderer/components/ui/input";
 import { Textarea } from "@/renderer/components/ui/textarea";
@@ -19,11 +27,12 @@ import {
   SelectValue
 } from "@/renderer/components/ui/select";
 import { cn } from "@/renderer/lib/utils";
-import { buildTranscriptSnippet } from "@/renderer/lib/transcript";
+import { buildTranscriptSnippet, transcribeWithSlidingWindow } from "@/renderer/lib/transcript";
 
 const SOURCE_LABELS = {
   microphone: "Microphone",
   speaker: "System audio",
+  upload: "Uploaded audio",
   manual: "Manual context",
   initial: "Initial context"
 };
@@ -31,6 +40,7 @@ const SOURCE_LABELS = {
 const SOURCE_BUBBLE_CLASSES = {
   microphone: "bg-sidebar-accent/10 text-sidebar-accent-foreground",
   speaker: "bg-secondary/15 text-secondary-foreground",
+  upload: "bg-emerald/10 text-emerald-foreground",
   manual: "bg-primary/10 text-secondary-foreground",
   initial: "bg-secondary/10 text-secondary-foreground"
 };
@@ -54,6 +64,8 @@ export function NoteWorkspace() {
     updateTranscriptEntry,
     updateNoteInitialContext,
     assignNoteFolder,
+    appendTranscriptEntry,
+    preferences,
     folders,
     themeMode,
     systemPrefersDark
@@ -63,7 +75,11 @@ export function NoteWorkspace() {
   const titleRef = useRef(null);
   const previousNoteIdRef = useRef(null);
   const transcriptsRef = useRef(null);
+  const uploadInputRef = useRef(null);
   const [summaryPrompt, setSummaryPrompt] = useState("");
+  const [isUploadInProgress, setIsUploadInProgress] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [summaryError, setSummaryError] = useState("");
   const [summaryFeedback, setSummaryFeedback] = useState("");
@@ -85,6 +101,8 @@ export function NoteWorkspace() {
   const noteEntries = useMemo(() => {
     return [...(activeNote?.transcript || [])];
   }, [activeNote?.transcript]);
+
+  const showUploadButton = noteEntries.length === 0 && !isCapturing;
 
   const transcriptEntries = useMemo(
     () => [...draftEntries, ...noteEntries],
@@ -117,12 +135,108 @@ export function NoteWorkspace() {
     setInitialContextInput(activeNote?.initialContext || "");
   }, [activeNote?.id, activeNote?.initialContext]);
 
+  useEffect(() => {
+    setUploadError("");
+    setUploadProgress(null);
+  }, [activeNote?.id]);
+
+  useEffect(() => {
+    if (noteEntries.length > 0 && uploadError) {
+      setUploadError("");
+    }
+  }, [noteEntries.length, uploadError]);
+
   const handleFolderChange = useCallback(
     value => {
       if (!activeNote?.id) return;
       assignNoteFolder(activeNote.id, value === UNASSIGNED_FOLDER_VALUE ? null : value);
     },
     [activeNote?.id, assignNoteFolder]
+  );
+
+  const submitInitialContextEntry = useCallback(() => {
+    if (!activeNote?.id || hasInitialEntry) return;
+    const trimmed = initialContextInput.trim();
+    const normalized = trimmed;
+    setInitialContextInput(normalized);
+    updateNoteInitialContext(activeNote.id, normalized);
+    const entryText = trimmed.length ? trimmed : "-";
+    addInitialEntry(entryText);
+  }, [activeNote?.id, hasInitialEntry, initialContextInput, updateNoteInitialContext, addInitialEntry]);
+
+  const handleUploadClick = useCallback(() => {
+    uploadInputRef.current?.click();
+  }, []);
+
+  const handleUploadFileChange = useCallback(
+    async event => {
+      const fileInput = uploadInputRef.current;
+      const file = event.currentTarget.files?.[0];
+      if (fileInput) {
+        fileInput.value = "";
+      }
+      if (!file) return;
+
+      submitInitialContextEntry();
+
+      setUploadError("");
+      setUploadProgress({
+        percent: 0,
+        label: "Preparing audio…",
+        rangeLabel: "",
+        totalChunks: 0,
+        processedChunks: 0
+      });
+      setIsUploadInProgress(true);
+
+      let appendedChunkCount = 0;
+
+      try {
+        const result = await transcribeWithSlidingWindow(file, {
+          language: preferences?.language,
+          onProgress: progress => {
+            const percent = Math.min(100, Math.max(0, progress?.percent ?? 0));
+            const label =
+              progress.chunkIndex >= 0
+                ? `Transcribing chunk ${progress.chunkIndex + 1} / ${progress.totalChunks}`
+                : "Preparing audio…";
+            const rangeLabel =
+              typeof progress.startSeconds === "number" && typeof progress.endSeconds === "number"
+                ? `${progress.startSeconds.toFixed(1)}s — ${progress.endSeconds.toFixed(1)}s`
+                : "";
+            setUploadProgress({
+              ...progress,
+              percent,
+              label,
+              rangeLabel
+            });
+          },
+          onChunk: chunk => {
+            const trimmed = (chunk.trimmedText || "").trim();
+            if (!trimmed) return;
+            appendTranscriptEntry({ source: "upload", text: trimmed });
+            appendedChunkCount += 1;
+          }
+        });
+        if (appendedChunkCount === 0) {
+          const [firstChunk] = Array.isArray(result?.chunks) ? result.chunks : [];
+          const fallbackText = (firstChunk?.trimmedText || firstChunk?.text || "").trim();
+          if (!fallbackText) {
+            setUploadError("Uploaded audio did not return any transcript text.");
+            return;
+          }
+          appendTranscriptEntry({ source: "upload", text: fallbackText });
+          appendedChunkCount = 1;
+        }
+      } catch (error) {
+        console.error("Upload transcription failed:", error);
+        setUploadError(error?.message || "Unable to transcribe the uploaded file.");
+      } finally {
+        setIsUploadInProgress(false);
+        setUploadProgress(null);
+      }
+    },
+    [appendTranscriptEntry, preferences?.language, submitInitialContextEntry]
   );
 
   const chatMessages = useMemo(
@@ -192,16 +306,6 @@ export function NoteWorkspace() {
     },
     [activeNote?.id, updateNoteInitialContext]
   );
-
-  const submitInitialContextEntry = useCallback(() => {
-    if (!activeNote?.id || hasInitialEntry) return;
-    const trimmed = initialContextInput.trim();
-    const normalized = trimmed;
-    setInitialContextInput(normalized);
-    updateNoteInitialContext(activeNote.id, normalized);
-    const entryText = trimmed.length ? trimmed : "-";
-    addInitialEntry(entryText);
-  }, [activeNote?.id, hasInitialEntry, initialContextInput, updateNoteInitialContext, addInitialEntry]);
 
   const handleGenerateSummary = async () => {
     if (!canGenerateSummary || isGenerating || !activeNote?.id) return;
@@ -547,7 +651,33 @@ export function NoteWorkspace() {
                   )}
                   <span className="sr-only">Microphone {micMuted ? "muted" : "active"}</span>
                 </Button>
+
+                {showUploadButton && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUploadClick}
+                    disabled={isUploadInProgress}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold"
+                    aria-label="Upload audio file"
+                  >
+                    <Upload className="h-3 w-3" />
+                    <span>{isUploadInProgress ? "Uploading…" : "Upload file"}</span>
+                  </Button>
+                )}
               </div>
+              {showUploadButton && (
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="audio/*,video/*"
+                  className="hidden"
+                  onChange={handleUploadFileChange}
+                />
+              )}
+              {showUploadButton && uploadError && (
+                <p className="text-xs text-destructive text-center">{uploadError}</p>
+              )}
             </div>
           </TabsContent>
 
@@ -608,6 +738,15 @@ export function NoteWorkspace() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={isUploadInProgress} onOpenChange={() => {}}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transcribing upload</DialogTitle>
+          </DialogHeader>
+          <Progress value={uploadProgress?.percent ?? 0} className="mt-4" />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
