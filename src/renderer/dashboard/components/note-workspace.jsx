@@ -115,6 +115,7 @@ export function NoteWorkspace() {
   const storedSummaries = activeNote?.summaries || [];
 
   const canGenerateSummary = transcriptEntries.some(entry => Boolean(entry.text));
+  const effectiveSummaryPrompt = summaryPrompt || folderSummaryPrompt;
   const manualInputLength = manualInput.trim().length;
   const hasInitialEntry = noteEntries.some(entry => entry.source === "initial");
   const showInitialForm = !hasInitialEntry;
@@ -315,7 +316,7 @@ export function NoteWorkspace() {
 
     try {
       const snippet = buildTranscriptSnippet(activeNote, drafts);
-      await generateSummary(activeNote.id, summaryPrompt, snippet);
+      await generateSummary(activeNote.id, effectiveSummaryPrompt, snippet);
       setSummaryPrompt("");
     } catch (error) {
       console.error(error);
@@ -686,9 +687,9 @@ export function NoteWorkspace() {
               <div className="space-y-2">
                 <div className="text-xs font-semibold uppercase text-muted-foreground">Summary prompt</div>
                 <textarea
-                  value={summaryPrompt}
+                  value={effectiveSummaryPrompt}
                   onChange={event => setSummaryPrompt(event.target.value)}
-                  placeholder={folderSummaryPrompt || "E.g., highlight key decisions, action items, or next steps."}
+                  placeholder="E.g., highlight key decisions, action items, or next steps."
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   rows={4}
                 />

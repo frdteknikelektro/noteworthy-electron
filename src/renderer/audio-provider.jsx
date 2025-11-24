@@ -226,16 +226,18 @@ export function AudioProvider({
       model,
       language: preferences?.language
     };
+    const turnDetection = {
+      type: "semantic_vad",
+      eagerness: "low" // "auto"
+    };
     const config = {
       input_audio_noise_reduction: {
-        type: 'near_field'
+        type: "near_field"
       },
       input_audio_transcription: {
         model: transcription.model
       },
-      turn_detection: {
-        type: "server_vad"
-      }
+      turn_detection: turnDetection
     };
     if (transcription.language) {
       config.input_audio_transcription.language = transcription.language;
@@ -243,7 +245,7 @@ export function AudioProvider({
     const initialContext =
       typeof activeNote?.initialContext === "string" ? activeNote.initialContext.trim() : "";
     if (initialContext) {
-      config.input_audio_transcription.prompt = `You're listening to:\n${initialContext}`;
+      config.input_audio_transcription.prompt = `<system>Context: \n${initialContext}\n\nPlease do not give response containing info within Context, response: '-' instead if you confuse.</system>`;
     }
     return config;
   }, [model, preferences, activeNote?.initialContext]);
