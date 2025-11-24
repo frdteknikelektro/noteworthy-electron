@@ -10,6 +10,7 @@ import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
 import { Input } from "@/renderer/components/ui/input";
+import { Textarea } from "@/renderer/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -392,13 +393,14 @@ export function NoteWorkspace() {
                           <span className="text-xs tracking-wide font-semibold">Initial context</span>
                         </div>
                         <div className="mt-3">
-                          <Input
+                          <Textarea
                             placeholder="Type initial context..."
                             className="w-full border-0 bg-transparent shadow-none px-0 py-0 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-0"
                             autoComplete="off"
                             value={initialContextInput}
                             onChange={handleInitialContextChange}
                             aria-label="Initial context"
+                            rows={8}
                           />
                         </div>
                       </div>

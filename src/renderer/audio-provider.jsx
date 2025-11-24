@@ -227,6 +227,9 @@ export function AudioProvider({
       language: preferences?.language
     };
     const config = {
+      input_audio_noise_reduction: {
+        type: 'near_field'
+      },
       input_audio_transcription: {
         model: transcription.model
       },
@@ -240,7 +243,7 @@ export function AudioProvider({
     const initialContext =
       typeof activeNote?.initialContext === "string" ? activeNote.initialContext.trim() : "";
     if (initialContext) {
-      config.input_audio_transcription.prompt = initialContext;
+      config.input_audio_transcription.prompt = `You're listening to:\n${initialContext}`;
     }
     return config;
   }, [model, preferences, activeNote?.initialContext]);
