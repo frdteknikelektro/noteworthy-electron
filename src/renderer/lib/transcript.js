@@ -1,3 +1,5 @@
+import { API_TEMPERATURE } from "@/renderer/settings/constants";
+
 export function buildTranscriptSnippet(note, drafts = {}) {
   if (!note) return "";
   const initialContextText =
@@ -17,8 +19,9 @@ export function buildTranscriptSnippet(note, drafts = {}) {
 
 const DEFAULT_CHUNK_SECONDS = 30;
 const DEFAULT_OVERLAP_SECONDS = 1;
-const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
+const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-transcribe-diarize";
 const DEFAULT_TRANSCRIPTION_RESPONSE_FORMAT = "json";
+export const AUDIO_UPLOAD_CHUNK_THRESHOLD_BYTES = 25 * 1024 * 1024;
 const TRANSCRIPTION_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions";
 
 function writeString(view, offset, string) {
@@ -90,13 +93,26 @@ function buildChunkTextFromSegments(chunk, dropSeconds) {
   return parts.join(" ").trim();
 }
 
-async function fetchTranscriptionChunk(blob, { apiKey, model, language, responseFormat }) {
+async function fetchTranscriptionChunk(blob, { apiKey, model, temperature, language, responseFormat, fileName, stream = false, onStreamEvent } = {}) {
+  const resolvedModel = model || DEFAULT_TRANSCRIPTION_MODEL;
+  const finalResponseFormat =
+    responseFormat ||
+    (resolvedModel.includes("diarize") ? "diarized_json" : DEFAULT_TRANSCRIPTION_RESPONSE_FORMAT);
   const formData = new FormData();
-  formData.append("model", model);
-  formData.append("file", blob, "chunk.wav");
-  formData.append("response_format", responseFormat || DEFAULT_TRANSCRIPTION_RESPONSE_FORMAT);
+  formData.append("model", resolvedModel);
+  const chunkFileName = fileName || blob?.name || "chunk.wav";
+  formData.append("file", blob, chunkFileName);
+  formData.append("response_format", finalResponseFormat);
   if (language) {
     formData.append("language", language);
+  }
+  const resolvedTemperature = typeof temperature === "number" ? temperature : API_TEMPERATURE;
+  formData.append("temperature", resolvedTemperature.toString());
+  if (resolvedModel.includes("diarize")) {
+    formData.append("chunking_strategy", "auto");
+  }
+  if (stream) {
+    formData.append("stream", "true");
   }
 
   const response = await fetch(TRANSCRIPTION_ENDPOINT, {
@@ -112,7 +128,84 @@ async function fetchTranscriptionChunk(blob, { apiKey, model, language, response
     throw new Error(`Transcription chunk failed (${response.status}): ${bodyText || response.statusText}`);
   }
 
+  if (stream) {
+    return parseTranscriptionStream(response, onStreamEvent);
+  }
+
   return response.json();
+}
+
+async function parseTranscriptionStream(response, onStreamEvent) {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Streaming transcription response body is unavailable.");
+  }
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalEvent = null;
+
+  const findNextSeparator = () => {
+    const newlineIndex = buffer.indexOf("\n\n");
+    const crlfIndex = buffer.indexOf("\r\n\r\n");
+    if (newlineIndex === -1 && crlfIndex === -1) {
+      return null;
+    }
+    if (newlineIndex === -1) {
+      return { index: crlfIndex, length: 4 };
+    }
+    if (crlfIndex === -1) {
+      return { index: newlineIndex, length: 2 };
+    }
+    return newlineIndex <= crlfIndex
+      ? { index: newlineIndex, length: 2 }
+      : { index: crlfIndex, length: 4 };
+  };
+
+  const emitEvent = payload => {
+    if (!payload) return;
+    onStreamEvent?.(payload);
+    if (payload.type === "transcript.text.done") {
+      finalEvent = payload;
+    }
+  };
+
+  const processChunk = chunk => {
+    if (!chunk.trim()) return;
+    const lines = chunk.split(/\r?\n/);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        emitEvent(JSON.parse(payload));
+      } catch (error) {
+        console.warn("Unable to parse streaming transcription payload:", error);
+      }
+    }
+  };
+
+  let done = false;
+  while (!done) {
+    const { value, done: readerDone } = await reader.read();
+    if (value) {
+      buffer += decoder.decode(value, { stream: true });
+    }
+    let boundary = findNextSeparator();
+    while (boundary) {
+      const chunk = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary.length);
+      processChunk(chunk);
+      boundary = findNextSeparator();
+    }
+    done = readerDone;
+  }
+
+  if (buffer.trim()) {
+    processChunk(buffer.trim());
+  }
+
+  return finalEvent;
 }
 
 function trimSegmentText(segment, dropSeconds) {
@@ -130,14 +223,215 @@ function trimSegmentText(segment, dropSeconds) {
   return segment.text.slice(removeCount).trim();
 }
 
+function formatSegmentMessage(segment) {
+  if (!segment?.text) return null;
+  const text = segment.text.trim();
+  if (!text) return null;
+  const speaker = segment.speaker ? String(segment.speaker).trim() : "";
+  return speaker ? `${speaker}: ${text}` : text;
+}
+
+export function buildSegmentMessages(segments) {
+  if (!Array.isArray(segments)) return [];
+  return segments.map(formatSegmentMessage).filter(Boolean);
+}
+
+function getSegmentStart(segment) {
+  return typeof segment?.start === "number" && Number.isFinite(segment.start) ? segment.start : 0;
+}
+
+function getSegmentEnd(segment) {
+  return typeof segment?.end === "number" && Number.isFinite(segment.end) ? segment.end : getSegmentStart(segment);
+}
+
+function getSegmentDuration(segment, fallback) {
+  const start = getSegmentStart(segment);
+  const end = getSegmentEnd(segment);
+  if (end >= start) {
+    return end - start;
+  }
+  return fallback;
+}
+
+function getSegmentsRange(segments) {
+  let minStart = Infinity;
+  let maxEnd = -Infinity;
+  for (const segment of segments) {
+    const start = getSegmentStart(segment);
+    const end = getSegmentEnd(segment);
+    if (start < minStart) {
+      minStart = start;
+    }
+    if (end > maxEnd) {
+      maxEnd = end;
+    }
+  }
+  if (!Number.isFinite(minStart)) {
+    minStart = 0;
+  }
+  if (!Number.isFinite(maxEnd)) {
+    maxEnd = minStart;
+  }
+  return { start: minStart, end: maxEnd };
+}
+
+export async function transcribeSingleRequest(audioBlob, config = {}) {
+  const {
+    apiKey = typeof window !== "undefined" ? window?.electronAPI?.apiKey : undefined,
+    model = DEFAULT_TRANSCRIPTION_MODEL,
+    temperature = API_TEMPERATURE,
+    language,
+    responseFormat,
+    stream = true,
+    onChunk,
+    onProgress
+  } = config;
+
+  if (!apiKey) {
+    throw new Error("OpenAI API key is required for transcription.");
+  }
+  if (!(audioBlob instanceof Blob)) {
+    throw new TypeError("transcribeSingleRequest expects a Blob or File instance.");
+  }
+
+  const AudioContextCtor = globalThis?.AudioContext;
+  if (!AudioContextCtor) {
+    throw new Error("AudioContext is not available in this environment.");
+  }
+
+  const audioContext = new AudioContextCtor();
+  try {
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const decoded = await audioContext.decodeAudioData(arrayBuffer);
+    const fallbackDuration =
+      decoded.sampleRate && decoded.length ? decoded.length / decoded.sampleRate : 0;
+    const rawDuration =
+      Number.isFinite(decoded.duration) && decoded.duration >= 0
+        ? decoded.duration
+        : fallbackDuration;
+    const durationSeconds = Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : 0;
+
+    const streamingSegments = [];
+    let streamingChunkIndex = 0;
+    let hasStreamedChunks = false;
+    const handleStreamEvent = event => {
+      console.log("handleStreamEvent", { event });
+      if (event?.type !== "transcript.text.segment") return;
+      const normalizedSegments = (() => {
+        if (!event) return [];
+        if (Array.isArray(event.segments)) {
+          return event.segments.filter(Boolean);
+        }
+        if (event.segment) {
+          if (Array.isArray(event.segment.segments)) {
+            return event.segment.segments.filter(Boolean);
+          }
+          return [event.segment].filter(Boolean);
+        }
+        return [event].filter(Boolean);
+      })();
+      if (!normalizedSegments.length) return;
+      const messageParts = normalizedSegments.map(formatSegmentMessage).filter(Boolean);
+      if (!messageParts.length) return;
+      streamingSegments.push(...normalizedSegments);
+      const chunkIndex = streamingChunkIndex;
+      const { start: startSeconds, end: endSeconds } = getSegmentsRange(normalizedSegments);
+      const durationSecondsForSegment = Math.max(endSeconds - startSeconds, 0);
+      const textParts = normalizedSegments
+        .map(segment => (typeof segment.text === "string" ? segment.text.trim() : ""))
+        .filter(Boolean);
+      const segmentChunk = {
+        chunkIndex,
+        totalChunks: chunkIndex + 1,
+        durationSeconds: durationSecondsForSegment,
+        segments: normalizedSegments,
+        text: textParts.join(" ").trim(),
+        trimmedText: messageParts.join(" "),
+        rawResponse: event
+      };
+      streamingChunkIndex += 1;
+      hasStreamedChunks = true;
+      onChunk?.(segmentChunk);
+      onProgress?.({
+        chunkIndex,
+        totalChunks: streamingChunkIndex,
+        processedChunks: streamingChunkIndex,
+        percent: 0,
+        startSeconds,
+        endSeconds,
+        durationSeconds: durationSecondsForSegment
+      });
+    };
+
+    const totalChunks = 1;
+    onProgress?.({
+      chunkIndex: -1,
+      totalChunks,
+      processedChunks: 0,
+      percent: 0,
+      startSeconds: 0,
+      endSeconds: 0,
+      durationSeconds
+    });
+
+    const response = await fetchTranscriptionChunk(audioBlob, {
+      apiKey,
+      model,
+      temperature,
+      language,
+      responseFormat,
+      fileName: audioBlob.name,
+      stream,
+      onStreamEvent: stream ? handleStreamEvent : undefined
+    });
+
+    const chunkBase = {
+      chunkIndex: 0,
+      durationSeconds,
+      segments: Array.isArray(response?.segments) ? response.segments : [],
+      text: typeof response?.text === "string" ? response.text.trim() : "",
+      rawResponse: response
+    };
+    const finalSegments = streamingSegments.length ? streamingSegments : chunkBase.segments;
+    chunkBase.segments = finalSegments;
+    const trimmedSegmentsText = buildChunkTextFromSegments(chunkBase, 0);
+    const fallbackText = chunkBase.text || "";
+    const chunk = { ...chunkBase, trimmedText: trimmedSegmentsText || fallbackText };
+
+    const shouldEmitFinalChunk = !stream || !hasStreamedChunks;
+    if (shouldEmitFinalChunk) {
+      onChunk?.(chunk);
+    }
+    const finalChunkIndex = hasStreamedChunks ? Math.max(0, streamingChunkIndex - 1) : 0;
+    const finalTotalChunks = hasStreamedChunks ? streamingChunkIndex : 1;
+    const finalProcessedChunks = hasStreamedChunks ? streamingChunkIndex : 1;
+    onProgress?.({
+      chunkIndex: finalChunkIndex,
+      totalChunks: finalTotalChunks,
+      processedChunks: finalProcessedChunks,
+      percent: 100,
+      startSeconds: 0,
+      endSeconds: durationSeconds,
+      durationSeconds
+    });
+
+    return {
+      chunks: [chunk]
+    };
+  } finally {
+    audioContext.close().catch(() => {});
+  }
+}
+
 export async function transcribeWithSlidingWindow(audioBlob, config = {}) {
   const {
     apiKey = typeof window !== "undefined" ? window?.electronAPI?.apiKey : undefined,
     chunkSeconds = DEFAULT_CHUNK_SECONDS,
     overlapSeconds = DEFAULT_OVERLAP_SECONDS,
     model = DEFAULT_TRANSCRIPTION_MODEL,
+    temperature = API_TEMPERATURE,
     language,
-    responseFormat = DEFAULT_TRANSCRIPTION_RESPONSE_FORMAT,
+    responseFormat,
     onChunk,
     onProgress
   } = config;
@@ -216,6 +510,7 @@ export async function transcribeWithSlidingWindow(audioBlob, config = {}) {
         const response = await fetchTranscriptionChunk(chunkBlob, {
           apiKey,
           model,
+          temperature,
           language,
           responseFormat
         });

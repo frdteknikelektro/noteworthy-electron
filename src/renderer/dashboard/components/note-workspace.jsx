@@ -35,7 +35,12 @@ import {
   SelectValue
 } from "@/renderer/components/ui/select";
 import { cn } from "@/renderer/lib/utils";
-import { buildTranscriptSnippet, transcribeWithSlidingWindow } from "@/renderer/lib/transcript";
+import {
+  buildTranscriptSnippet,
+  transcribeSingleRequest,
+  transcribeWithSlidingWindow,
+  AUDIO_UPLOAD_CHUNK_THRESHOLD_BYTES
+} from "@/renderer/lib/transcript";
 
 const SOURCE_LABELS = {
   microphone: "Microphone",
@@ -44,6 +49,36 @@ const SOURCE_LABELS = {
   manual: "Manual context",
   initial: "Initial context"
 };
+
+const SUPPORTED_UPLOAD_EXTENSIONS = [".wav", ".mp3"];
+const SUPPORTED_UPLOAD_MIME_TYPES = new Set([
+  "audio/wav",
+  "audio/x-wav",
+  "audio/vnd.wave",
+  "audio/mpeg",
+  "audio/mp3"
+]);
+const SUPPORTED_AUDIO_UPLOAD_MESSAGE = "Only WAV or MP3 audio files are supported for upload.";
+
+function getFileExtension(fileName = "") {
+  if (!fileName) return "";
+  const normalized = fileName.trim();
+  const dotIndex = normalized.lastIndexOf(".");
+  if (dotIndex === -1 || dotIndex === normalized.length - 1) {
+    return "";
+  }
+  return normalized.slice(dotIndex).toLowerCase();
+}
+
+function isSupportedAudioFile(file) {
+  if (!file) return false;
+  const mime = (file.type || "").toLowerCase();
+  if (SUPPORTED_UPLOAD_MIME_TYPES.has(mime)) {
+    return true;
+  }
+  const extension = getFileExtension(file.name);
+  return SUPPORTED_UPLOAD_EXTENSIONS.includes(extension);
+}
 
 const UNASSIGNED_FOLDER_VALUE = "__unassigned";
 
@@ -98,6 +133,7 @@ export function NoteWorkspace() {
   const previousNoteIdRef = useRef(null);
   const transcriptsRef = useRef(null);
   const uploadInputRef = useRef(null);
+  const uploadTotalSecondsRef = useRef(0);
   const isEditingRef = useRef(false);
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [isUploadInProgress, setIsUploadInProgress] = useState(false);
@@ -256,9 +292,17 @@ export function NoteWorkspace() {
       }
       if (!file) return;
 
+      if (!isSupportedAudioFile(file)) {
+        setUploadError(SUPPORTED_AUDIO_UPLOAD_MESSAGE);
+        setUploadProgress(null);
+        setIsUploadInProgress(false);
+        return;
+      }
+
       submitInitialContextEntry();
 
       setUploadError("");
+      uploadTotalSecondsRef.current = 0;
       setUploadProgress({
         percent: 0,
         label: "Preparing audio…",
@@ -271,9 +315,19 @@ export function NoteWorkspace() {
       let appendedChunkCount = 0;
 
       try {
-        const result = await transcribeWithSlidingWindow(file, {
+        const shouldChunkUpload = file.size >= AUDIO_UPLOAD_CHUNK_THRESHOLD_BYTES;
+        const transcribeFn = shouldChunkUpload ? transcribeWithSlidingWindow : transcribeSingleRequest;
+        const result = await transcribeFn(file, {
           language: preferences?.language,
           onProgress: progress => {
+            if (
+              progress?.chunkIndex === -1 &&
+              typeof progress?.durationSeconds === "number" &&
+              progress.durationSeconds > 0
+            ) {
+              uploadTotalSecondsRef.current = progress.durationSeconds;
+            }
+
             const percent = Math.min(100, Math.max(0, progress?.percent ?? 0));
             const label =
               progress.chunkIndex >= 0
@@ -283,9 +337,16 @@ export function NoteWorkspace() {
               typeof progress.startSeconds === "number" && typeof progress.endSeconds === "number"
                 ? `${progress.startSeconds.toFixed(1)}s — ${progress.endSeconds.toFixed(1)}s`
                 : "";
+            const totalSeconds = uploadTotalSecondsRef.current;
+            const endSeconds =
+              typeof progress?.endSeconds === "number" ? progress.endSeconds : undefined;
+            const streamingPercent =
+              totalSeconds > 0 && typeof endSeconds === "number"
+                ? Math.round((endSeconds / totalSeconds) * 100)
+                : percent;
             setUploadProgress({
               ...progress,
-              percent,
+              percent: Math.min(100, Math.max(0, streamingPercent)),
               label,
               rangeLabel
             });
@@ -313,6 +374,7 @@ export function NoteWorkspace() {
       } finally {
         setIsUploadInProgress(false);
         setUploadProgress(null);
+        uploadTotalSecondsRef.current = 0;
       }
     },
     [appendTranscriptEntry, preferences?.language, submitInitialContextEntry]
@@ -788,7 +850,7 @@ export function NoteWorkspace() {
                     <input
                       ref={uploadInputRef}
                       type="file"
-                      accept="audio/*,video/*"
+                      accept=".wav,.mp3,audio/wav,audio/x-wav,audio/vnd.wave,audio/mpeg,audio/mp3"
                       className="hidden"
                       onChange={handleUploadFileChange}
                     />
