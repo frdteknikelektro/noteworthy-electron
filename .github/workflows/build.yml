@@ -26,6 +26,7 @@ jobs:
     env:
       OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
       NODE_ENV: production
+      NPM_CONFIG_PRODUCTION: false
     steps:
       - name: Checkout source
         uses: actions/checkout@v4

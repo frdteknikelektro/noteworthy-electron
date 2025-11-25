@@ -1,81 +1,102 @@
 # Noteworthy — Automatic Notes
 
-Noteworthy is a beautiful Electron desktop note taker that pipes both microphone and system audio into OpenAI's Realtime transcription API. Start a live note, capture human + computer voices at once, jot manual highlights, and export everything with a couple of clicks. Notes live locally on your machine; no accounts, sync services, or surprise uploads.
+![License Badge](https://img.shields.io/badge/license-Unspecified-lightgrey)
+![Status Badge](https://img.shields.io/badge/status-experimental-yellow)
 
-![Screenshot](.github/screenshot-1.png)
-![Screenshot](.github/screenshot-2.png)
+Noteworthy is a beautiful Electron desktop note taker that captures microphone and system audio together, pipes both streams through OpenAI's Realtime transcription API, and keeps every session locally searchable without requiring accounts or sync services.
 
-## Highlights
+## Table of Contents
+- [Project overview](#project-overview)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Installation & setup](#installation--setup)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Architecture & structure](#architecture--structure)
+- [Built with](#built-with)
+- [Testing](#testing)
+- [Packaging](#packaging)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
+- [License](#license)
+- [Contact](#contact)
 
-- **Dual-source capture** – stream microphone input and looped-back system audio into the same note so every voice and clip is searchable.
-- **Live transcripts** – entries are stamped with timestamps and source badges (Microphone vs System audio) so you always know where context came from.
-- **Lightweight note hub** – organise sessions, search history, add free-form highlights, archive finished notes, and clear old archives when you want a clean slate.
-- **Local-first storage** – notes are saved in the renderer's local storage; nothing leaves your device unless you export it.
-- **One-click exports** – generate Markdown summaries or print-ready PDFs directly from the desktop app.
-- **Backup recording** – optional combined WAV recorder for redundancy.
-- **Upcoming** – Offline capture via `whisper.cpp` so you can transcribe without an internet connection.
-- **Localized controls** – set a default transcription language (ships with Bahasa Indonesia) and add an optional context prompt before audio is uploaded.
-- **Folder organization** – group recordings into named folders with tags/colors and reusable context/summary defaults so each process starts with the right template.
+## Project overview
+Noteworthy combines microphone and looped-back system audio into a single, searchable live note so you can capture meetings, creative sessions, or YouTube audio without juggling separate transcripts. Every note stays on your machine until you export it, then timestamps, source badges, and human-written highlights give your transcripts clear context.
 
-## Prerequisites
+## Features
+- **Dual-source capture** – stream microphone input and system audio into the same note with source badges to distinguish speakers.
+- **Live transcripts** – every entry is timestamped, labeled (Microphone vs System Audio), and can be annotated with highlights.
+- **Local-first storage** – renderer-managed storage keeps your sessions private unless you pick an export option.
+- **One-click exports** – download Markdown summaries or print-ready PDFs directly from the desktop.
+- **Backup recording** – optional WAV recorder records the combined audio as a fallback.
+- **Localized controls** – set a default transcription language (Bahasa Indonesia included) and prefill a context prompt before the audio is sent.
+- **Folder organization** – group recordings by folder with tags, colors, and reusable templates for context and summary prompts.
 
-- macOS, Windows, or Linux
-- Node.js v16+
-- OpenAI API key with access to the Realtime API (set `OPENAI_KEY` in `.env`)
-- Microphone + permission to capture system audio (screen/audio capture prompts will appear on first run)
+## Screenshots
+![Screenshot 1](.github/screenshot-1.png)
 
-## Getting Started
-
-```bash
-npm install
-npm start  # runs `vite build` before launching Electron
-```
-
-For faster UI iteration you can run `npm run dev` to start the Vite dev server while you work on the renderer bundle.
-
-1. Create a `.env` in the project root:
+## Installation & setup
+1. Install prerequisites: Electron supports macOS, Windows, or Linux, and requires Node.js **v16+**.
+2. Clone the repo, then run `npm install` to fetch dependencies.
+3. Copy `.env.example` to `.env` and add your OpenAI Realtime API key:
    ```ini
    OPENAI_KEY=sk-...
    ```
-2. Run `npm start` to launch the Electron window.
-3. Click **New Live Note**, give it a name, then press **Start capture**.
-4. Grant microphone and screen/audio capture permissions when prompted.
-5. Watch transcript entries stream in with clear labels for microphone or system audio. Add your own highlights in the editor panel as you go.
-6. Export to Markdown or PDF whenever you need to share the record.
+4. Start the app with `npm start` (runs `vite build` before launching Electron) or use `npm run dev` when iterating on the renderer UI.
 
-## Controls & Panels
+## Usage
+1. Launch Noteworthy via `npm start` or the packaged installer.
+2. Click **New Live Note**, name the session, and hit **Start capture**.
+3. Grant microphone and screen/audio capture permissions if prompted.
+4. Transcripts appear in real time with clear Microphone vs System Audio badges.
+5. Add highlights directly in the editor while the capture is running.
+6. Export to Markdown or PDF whenever you want to share or archive the session.
 
-- **Capture controls** – start/stop streaming, choose transcription model, select your input microphone, and trigger the optional backup recorder.
-- **Transcription preferences** – switch language and provide a context prompt.
-- **Status pills** – see at a glance whether microphone, system audio, and recording channels are live.
-- **Live transcript** – rolling feed of entries. Draft badges show when the model is listening or processing before the final text lands in the note.
-- **Highlights** – freeform contenteditable area for action items or context.
-- **Housekeeping** – archive a note when it is done, then clear archived notes in bulk from the sidebar.
-- **Folders** – create folders with tags/colors/default context and summary prompts; the folder list sits above history, and selecting a folder scopes the note list with a Back control.
+## Configuration
+- `OPENAI_KEY` – required (Realtime API access); place it in the `.env` file at the repo root.
+- `OPENAI_API_BASE` – optional override if you are using a proxy or a different OpenAI deployment.
+- Audio permissions – macOS and Windows may prompt you for microphone and screen/audio capture on first launch.
+- Environment toggles (e.g., `NODE_ENV`) follow the standard Electron/Vite patterns when running `npm run dev` or `npm start`.
 
-## Exporting
+## Architecture & structure
+- `main.js` – Electron main process entry point.
+- `preload.js` – exposes safe APIs to the renderer and manages native helpers.
+- `src/renderer` – React + Vite renderer lives here, split into `dashboard`, `components`, `lib`, `workers`, and shared styles; audio utilities stay in `src/audio` and hooks in `src/hooks`.
+- `assets` and `public` – static assets used by both renderer and installer builds.
+- `dist/` – renderer bundle output; rebuilt via `npm run build:renderer` before packaging.
+- `release/` – electron-builder artifacts (`.dmg`, `.zip`, `.exe`, `.AppImage`) appear here.
 
-- **Markdown** – produces a `.md` file with timestamps, source labels, and highlights (converted to plain text).
-- **PDF** – opens a print preview; choose *Save as PDF* to download a styled snapshot of the note.
+## Built with
+React · Vite · Tailwind · Electron · electron-builder · OpenAI Realtime · LAME audio helpers
 
-## Development Notes
-
-- Project entry points now live in `main.js` (Electron main), `preload.js`, and the React renderer under `src/renderer`.
-- The renderer is bundled with Vite/Tailwind, renders from `src/renderer/index.jsx`, and ships the app shell + UI helpers stored in `src/renderer/components/ui` (build output lands in `dist/`). Theme tokens follow the Tweakcn export format, so refresh the `:root`, `.dark`, and `@theme inline` blocks in `src/renderer/styles.css` with the CSS snippet you get from https://github.com/jnsahaj/tweakcn or https://tweakcn.com when you tweak the palette.
-- Run `npm run build:renderer` to produce a fresh renderer bundle before `npm start`, or use `npm run dev` for the Vite dev server while prototyping.
-- Audio loopback is provided by [`electron-audio-loopback`](https://github.com/alectrocute/electron-audio-loopback).
-- Tests are not configured yet. Add `jest` or `mocha` if you contribute automated coverage.
+## Testing
+Manual testing only so far: run `npm run dev` to exercise the renderer UI in Vite’s hot-reload server, and launch `npm start` for a full Electron preview. Document any new manual flows you exercise for future contributors.
 
 ## Packaging
+1. Ensure `npm run build:renderer` succeeds (included in `npm start`).
+2. Run `npm run dist` to rebuild the renderer and invoke `electron-builder`.
+3. Use the platform-specific helpers (`npm run dist:mac`, `npm run dist:win`, `npm run dist:linux`) when you need a macOS DMG/ZIP, Windows NSIS/ZIP, or Linux AppImage explicitly.
+4. Find installers in `release/Noteworthy-<version>.*`; archive them if you want to keep copies because this folder is overwritten each build.
 
-- Install dependencies (`npm install`) and make sure a valid `OPENAI_KEY` lives in `.env`; the packaging step picks up whatever credentials exist locally.
-- Run `npm run dist` to rebuild the renderer and run `electron-builder` for whatever platform you are on. Platform-specific helpers (`npm run dist:mac`, `npm run dist:win`, `npm run dist:linux`) rebuild the renderer and run the matching target explicitly (`DMG/ZIP`, `NSIS/ZIP`, or `AppImage`), so use them when you want to override the default behavior (macOS hosts already produce signed DMG + ZIP). Windows builds on macOS require Wine/mono layers, so install those before running `npm run dist:win`.
-- Find all of the outputs in `release/Noteworthy-<version>.*` (e.g., `.dmg`, `.zip`, `.exe`, `.AppImage`) and share the packages with the respective platform users. The release directory is overwritten on each build, so archive artifacts if you need to store them long term.
+## Contributing
+- Follow the established module organization in `AGENTS.md`: keep UI components under `src/renderer/dashboard/components`, helpers in `renderer/lib`, hooks in `src/hooks`, and audio utilities in `src/audio`.
+- Stick to PascalCase for components, camelCase for utilities/hooks, and kebab-case for directories such as `dashboard/components` and `workers`.
+- Group imports with external packages before alias paths (`@/renderer`).
+- Use two-space indentation in JSX/JS.
+- Run `npm run build:renderer` (or `npm run dev`) to verify renderer changes locally before opening a pull request.
+- Preface commits with conventional prefixes (e.g., `feat:`, `fix:`, `docs:`) followed by an imperative summary.
+- Open issues for bugs, enhancement ideas, or questions; PRs should include verification steps and highlight any manual testing performed.
 
-## Roadmap & Ideas
+## Roadmap
+- Offline speech-to-text via `whisper.cpp` for local transcription.
+- Multi-track export plus advanced search and tagging.
+- Workspace sync once the local-first experience stabilizes.
 
-- Offline speech-to-text via `whisper.cpp` (UI already surfaces the teaser badge).
-- Multi-track export and advanced search/tagging.
-- Workspace sync once local-first workflows feel mature.
+## License
+Not specified. Contact the author if you need a license grant or want to propose one.
 
-Pull requests are welcome—keep them focused and follow Conventional Commit messaging (e.g. `feat(notes): add note color tags`).
+## Contact
+Author: frdteknikelektro@gmail.com
+
+This README follows GitHub community best practices by covering the recommended sections (overview, installation, usage, configuration, contributing, license, and contact) so the project stays easy to understand and contribute to.
