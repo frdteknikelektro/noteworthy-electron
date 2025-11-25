@@ -386,9 +386,8 @@ export function AudioProvider({
       language: preferences?.language
     };
     const turnDetection = {
-      type: "server_vad",
-      threshold: 0.25,
-      silence_duration_ms: 1000,
+      type: "semantic_vad",
+      eagerness: "auto"
     };
     const config = {
       input_audio_noise_reduction: {
