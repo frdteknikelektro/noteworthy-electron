@@ -9,6 +9,14 @@ import { useAudio } from "@/renderer/audio-provider";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from "@/renderer/components/ui/card";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -788,144 +796,157 @@ export function NoteWorkspace() {
             </div>
           </TabsContent>
 
-          <TabsContent value="summary" className="flex flex-1 flex-col gap-5 mt-0 overflow-hidden">
-            <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-1 py-4">
-              <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase text-muted-foreground">Summary prompt</div>
-                <textarea
-                  value={effectiveSummaryPrompt}
-                  onChange={event => setSummaryPrompt(event.target.value)}
-                  placeholder="E.g., highlight key decisions, action items, or next steps."
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  rows={4}
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button onClick={handleGenerateSummary} disabled={!canGenerateSummary || isGenerating}>
-                  {isGenerating ? "Generating…" : "Generate summary"}
-                </Button>
-                <Badge variant="accent">{storedSummaries.length} document{storedSummaries.length === 1 ? "" : "s"}</Badge>
-              </div>
-              {summaryError && (
-                <p className="text-xs text-destructive">{summaryError}</p>
-              )}
-              {summaryFeedback && (
-                <p className="text-xs text-foreground">{summaryFeedback}</p>
-              )}
+          <TabsContent value="summary" className="flex flex-1 flex-col gap-4 mt-0 overflow-hidden">
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto py-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Generate Summary</CardTitle>
+                  <CardDescription>
+                    Create AI-powered summaries from your transcript
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <textarea
+                    value={effectiveSummaryPrompt}
+                    onChange={event => setSummaryPrompt(event.target.value)}
+                    placeholder="E.g., highlight key decisions, action items, or next steps."
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    rows={3}
+                  />
+                  {summaryError && (
+                    <p className="text-xs text-destructive">{summaryError}</p>
+                  )}
+                  {summaryFeedback && (
+                    <p className="text-xs text-muted-foreground">{summaryFeedback}</p>
+                  )}
+                </CardContent>
+                <CardFooter>
+                  <Button onClick={handleGenerateSummary} disabled={!canGenerateSummary || isGenerating}>
+                    {isGenerating ? "Generating…" : "Generate"}
+                  </Button>
+                </CardFooter>
+              </Card>
+
               <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-foreground">Documents</h4>
+                  <Badge variant="secondary">{storedSummaries.length}</Badge>
+                </div>
                 {storedSummaries.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Summaries based on the transcript will show up here.
-                  </p>
+                  <Card>
+                    <CardContent className="py-6">
+                      <p className="text-sm text-muted-foreground text-center">
+                        Generated summaries will appear here
+                      </p>
+                    </CardContent>
+                  </Card>
                 ) : (
                   storedSummaries.map((entry, index) => (
-                    <article
-                      key={entry.id}
-                      className="space-y-2 rounded-xl border border-border bg-background/80 p-4 shadow-sm"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase text-muted-foreground">
-                        <span>{formatTimestamp(entry.createdAt)}</span>
-                        <Badge variant="secondary">Doc {storedSummaries.length - index}</Badge>
-                      </div>
-                      <p className="text-sm font-semibold text-foreground">{entry.prompt}</p>
-                      <div className="flex flex-wrap items-center gap-2">
+                    <Card key={entry.id}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm">{entry.prompt}</CardTitle>
+                          <Badge variant="outline" className="text-xs">
+                            #{storedSummaries.length - index}
+                          </Badge>
+                        </div>
+                        <CardDescription>{formatTimestamp(entry.createdAt)}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground whitespace-pre-line">{entry.body}</p>
+                      </CardContent>
+                      <CardFooter className="gap-2">
                         <Button size="sm" variant="outline" onClick={() => handleCopySummary(entry)}>
                           Copy
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleDownloadSummary(entry)}>
                           Download
                         </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-line">{entry.body}</p>
-                    </article>
+                      </CardFooter>
+                    </Card>
                   ))
                 )}
               </div>
             </div>
           </TabsContent>
-          <TabsContent value="files" className="flex flex-1 flex-col gap-5 mt-0 overflow-hidden">
-            <div className="flex flex-col gap-5 overflow-y-auto px-1 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs uppercase text-muted-foreground">{recordingsScopeLabel}</p>
-                <span className="text-xs text-muted-foreground">
-                  {sortedRecordings.length} recording{sortedRecordings.length === 1 ? "" : "s"}
-                </span>
+          <TabsContent value="files" className="flex flex-1 flex-col gap-4 mt-0 overflow-hidden">
+            <div className="flex flex-col gap-4 overflow-y-auto py-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-foreground">{recordingsScopeLabel}</h4>
+                <Badge variant="secondary">{sortedRecordings.length}</Badge>
               </div>
               {sortedRecordings.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Record a session to see MP3 exports, playback, and reveal links in this tab.
-                </p>
+                <Card>
+                  <CardContent className="py-6">
+                    <p className="text-sm text-muted-foreground text-center">
+                      Record a session to see MP3 exports here
+                    </p>
+                  </CardContent>
+                </Card>
               ) : (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                   {sortedRecordings.map(recording => {
                     const folder = folders.find(folderItem => folderItem.id === recording.folderId);
                     const audioSrc = buildFileUrl(recording.filePath);
                     return (
-                      <article
-                        key={recording.id}
-                        className="space-y-3 rounded-xl border border-border bg-background/80 p-4 shadow-sm"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-foreground">{recording.title}</p>
+                      <Card key={recording.id}>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1 min-w-0 flex-1">
+                              <CardTitle className="text-sm truncate">{recording.title}</CardTitle>
+                              <CardDescription>
+                                {formatTimestamp(recording.createdAt)}
+                                {recording.durationMs ? ` · ${formatDuration(recording.durationMs)}` : ""}
+                              </CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {folder && (
+                                <Badge variant="outline" className="text-xs">
+                                  {folder.name}
+                                </Badge>
+                              )}
+                              {recording.processing && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Processing
+                                </Badge>
+                              )}
+                              {recording.fileMissing && !recording.processing && (
+                                <Badge variant="destructive" className="text-xs">
+                                  Missing
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {audioSrc && !recording.fileMissing ? (
+                            <audio
+                              controls
+                              preload="metadata"
+                              className="w-full h-10"
+                              src={audioSrc}
+                            />
+                          ) : (
                             <p className="text-xs text-muted-foreground">
-                              {formatTimestamp(recording.createdAt)}
-                              {recording.durationMs ? ` · ${formatDuration(recording.durationMs)}` : ""}
+                              {recording.fileMissing
+                                ? "The MP3 file is missing on disk."
+                                : "Processing MP3 export…"}
                             </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {folder && (
-                              <Badge variant="outline" className="text-[0.6rem] uppercase">
-                                {folder.name}
-                              </Badge>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="flex items-center gap-1 text-destructive"
-                              onClick={() => handleDeleteRecording(recording)}
-                            >
-                              <Trash className="h-3 w-3" aria-hidden="true" />
-                              <span>Delete</span>
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          {recording.processing && (
-                            <Badge variant="secondary" className="text-[0.6rem] uppercase">
-                              Processing…
-                            </Badge>
                           )}
-                          {recording.fileMissing && !recording.processing && (
-                            <Badge variant="destructive" className="text-[0.6rem] uppercase">
-                              File missing
-                            </Badge>
+                          {recording.error && (
+                            <p className="text-xs text-destructive">{recording.error}</p>
                           )}
-                        </div>
-                        {audioSrc && !recording.fileMissing ? (
-                          <audio
-                            controls
-                            preload="metadata"
-                            className="w-full rounded border border-border"
-                            src={audioSrc}
-                          />
-                        ) : (
-                          <div className="text-xs text-muted-foreground">
-                            {recording.fileMissing
-                              ? "The MP3 file is missing on disk."
-                              : "Processing MP3 export…"}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2">
+                        </CardContent>
+                        <CardFooter className="gap-2">
                           {audioSrc && !recording.processing && !recording.fileMissing ? (
                             <Button size="sm" variant="outline" asChild>
                               <a href={audioSrc} download={`recording-${recording.id}.mp3`}>
-                                Download MP3
+                                Download
                               </a>
                             </Button>
                           ) : (
                             <Button size="sm" variant="outline" disabled>
-                              Download MP3
+                              Download
                             </Button>
                           )}
                           <Button
@@ -936,13 +957,18 @@ export function NoteWorkspace() {
                               !recording.directoryPath || recording.processing || recording.fileMissing
                             }
                           >
-                            Reveal folder
+                            Reveal
                           </Button>
-                        </div>
-                        {recording.error && (
-                          <p className="text-xs text-destructive">{recording.error}</p>
-                        )}
-                      </article>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive ml-auto"
+                            onClick={() => handleDeleteRecording(recording)}
+                          >
+                            <Trash className="h-3 w-3" aria-hidden="true" />
+                          </Button>
+                        </CardFooter>
+                      </Card>
                     );
                   })}
                 </div>
