@@ -17,15 +17,15 @@ jobs:
           - os: ubuntu-latest
             script: dist:linux
             artifact-prefix: linux
-            node: "20.x"
+            node: "24.x"
           - os: windows-latest
             script: dist:win
             artifact-prefix: windows
-            node: "20.x"
+            node: "24.x"
           - os: macos-latest
             script: dist:mac
             artifact-prefix: macos
-            node: "20.x"
+            node: "24.x"
     env:
       OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
       NODE_ENV: production
