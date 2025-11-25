@@ -1,25 +1,8 @@
+import { Mp3Encoder } from "@breezystack/lamejs";
+
 const TARGET_SAMPLE_RATE = 16000;
-const TARGET_BITRATE = 96;
-
-const NODE_LAME_MODULE = ["node", "-", "lame"].join("");
-const nodeRequire = (() => {
-  if (typeof globalThis !== "undefined" && typeof globalThis.require === "function") {
-    return globalThis.require;
-  }
-  if (typeof self !== "undefined" && typeof self.require === "function") {
-    return self.require;
-  }
-  return null;
-})();
-const { Lame } = nodeRequire ? nodeRequire(NODE_LAME_MODULE) : {};
-
-const TARGET_SAMPLE_SFREQ = TARGET_SAMPLE_RATE / 1000;
-
-if (typeof Lame !== "function") {
-  throw new Error(
-    "node-lame is unavailable in this worker. Enable nodeIntegrationInWorker in BrowserWindow if you need MP3 encoding."
-  );
-}
+const TARGET_BITRATE = 128;
+const BLOCK_SIZE = 1152;
 
 const clamp = value => Math.max(-1, Math.min(1, value));
 
@@ -76,34 +59,41 @@ function resample(buffer, sourceRate, targetRate) {
   return result;
 }
 
-async function encodeWithNodeLame(int16Array, progressCallback) {
-  const encoder = new Lame({
-    output: "buffer",
-    bitrate: TARGET_BITRATE,
-    raw: true,
-    sfreq: TARGET_SAMPLE_SFREQ,
-    bitwidth: 16,
-    signed: true,
-    mode: "m",
-    cbr: true,
-    "little-endian": true
-  });
+function encodeMp3(int16Samples, progressCallback) {
+  const encoder = new Mp3Encoder(1, TARGET_SAMPLE_RATE, TARGET_BITRATE);
+  const chunks = [];
+  const totalSamples = int16Samples.length;
+  const normalizedTotal = Math.max(totalSamples, 1);
 
-  const emitter = typeof encoder.getEmitter === "function" ? encoder.getEmitter() : null;
-  if (emitter && typeof emitter.on === "function") {
-    emitter.on("progress", progressCallback);
-  }
-
-  try {
-    const buffer = Buffer.from(int16Array.buffer, int16Array.byteOffset, int16Array.byteLength);
-    encoder.setBuffer(buffer);
-    await encoder.encode();
-    return encoder.getBuffer();
-  } finally {
-    if (emitter && typeof emitter.removeListener === "function") {
-      emitter.removeListener("progress", progressCallback);
+  for (let offset = 0; offset < totalSamples; offset += BLOCK_SIZE) {
+    const end = Math.min(offset + BLOCK_SIZE, totalSamples);
+    const block = int16Samples.subarray(offset, end);
+    const chunk = encoder.encodeBuffer(block);
+    if (chunk.length) {
+      chunks.push(chunk);
+    }
+    const percent = Math.min(99, Math.round((end / normalizedTotal) * 100));
+    if (typeof progressCallback === "function") {
+      progressCallback(percent);
     }
   }
+
+  const flushed = encoder.flush();
+  if (flushed.length) {
+    chunks.push(flushed);
+  }
+  if (typeof progressCallback === "function") {
+    progressCallback(100);
+  }
+
+  const length = chunks.reduce((sum, current) => sum + current.length, 0);
+  const buffer = new Uint8Array(length);
+  let cursor = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, cursor);
+    cursor += chunk.length;
+  }
+  return buffer.buffer;
 }
 
 self.onmessage = async event => {
@@ -146,12 +136,7 @@ self.onmessage = async event => {
     const totalSamples = resampled.length;
     const int16Samples = floatTo16BitPCM(resampled, totalSamples);
 
-    const emitterProgressHandler = ([progressValue] = []) => {
-      sendProgress(progressValue);
-    };
-
-    const rawMp3 = await encodeWithNodeLame(int16Samples, emitterProgressHandler);
-    sendProgress(100);
+    const rawMp3 = encodeMp3(int16Samples, sendProgress);
 
     const view = new Uint8Array(rawMp3);
     const buffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);

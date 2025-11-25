@@ -16,9 +16,13 @@
     "dev": "vite",
     "build:renderer": "vite build",
     "start": "npm run build:renderer && electron .",
-    "dist": "npm run build:renderer && electron-builder --mac"
+    "dist": "npm run build:renderer && electron-builder",
+    "dist:mac": "npm run build:renderer && electron-builder --mac",
+    "dist:win": "npm run build:renderer && electron-builder --win",
+    "dist:linux": "npm run build:renderer && electron-builder --linux"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-label": "^2.1.8",
@@ -34,7 +38,6 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.0",
     "electron-audio-loopback": "^1.0.5",
-    "node-lame": "^1.5.1",
     "lucide-react": "^0.553.0",
     "react": "^18.3.0",
     "react-audio-visualize": "^1.2.0",
@@ -59,13 +62,7 @@
     "directories": {
       "output": "release"
     },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.productivity"
-    },
+    "icon": "assets/icons/icon.png",
     "files": [
       "dist/**/*",
       "main.js",
@@ -73,6 +70,33 @@
       "package.json",
       ".env",
       "node_modules/**/*"
-    ]
+    ],
+    "publish": null,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icons/icon.png",
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "assets/icons/icon.png"
+    },
+    "nsis": {
+      "perMachine": false,
+      "oneClick": false,
+      "allowElevation": true
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "assets/icons/icon.png"
+    }
   }
 }

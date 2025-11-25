@@ -69,8 +69,8 @@ For faster UI iteration you can run `npm run dev` to start the Vite dev server w
 ## Packaging
 
 - Install dependencies (`npm install`) and make sure a valid `OPENAI_KEY` lives in `.env`; the packaging step picks up whatever credentials exist locally.
-- Run `npm run dist` to rebuild the renderer and invoke `electron-builder --mac`, which emits the notarized `dmg` and zipped app under `release/`.
-- Share the resulting `release/Noteworthy-<version>.dmg`/`.zip` with macOS users or add more targets if you need installers for other platforms.
+- Run `npm run dist` to rebuild the renderer and run `electron-builder` for whatever platform you are on. Platform-specific helpers (`npm run dist:mac`, `npm run dist:win`, `npm run dist:linux`) rebuild the renderer and run the matching target explicitly (`DMG/ZIP`, `NSIS/ZIP`, or `AppImage`), so use them when you want to override the default behavior (macOS hosts already produce signed DMG + ZIP). Windows builds on macOS require Wine/mono layers, so install those before running `npm run dist:win`.
+- Find all of the outputs in `release/Noteworthy-<version>.*` (e.g., `.dmg`, `.zip`, `.exe`, `.AppImage`) and share the packages with the respective platform users. The release directory is overwritten on each build, so archive artifacts if you need to store them long term.
 
 ## Roadmap & Ideas
 
