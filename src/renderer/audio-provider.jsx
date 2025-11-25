@@ -13,6 +13,7 @@ import { Session, WavRecorder } from "./lib/audio";
 import { MIC_DEVICE_STORAGE_KEY } from "./storage-keys";
 import { buildTranscriptSnippet } from "./lib/transcript";
 import { generateId } from "./lib/id";
+import { API_TEMPERATURE } from "./settings/constants";
 
 const AudioContext = createContext(null);
 
@@ -394,7 +395,8 @@ export function AudioProvider({
         type: "near_field"
       },
       input_audio_transcription: {
-        model: transcription.model
+        model: transcription.model,
+        temperature: API_TEMPERATURE
       },
       turn_detection: turnDetection
     };

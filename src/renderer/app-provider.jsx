@@ -13,6 +13,7 @@ import {
   RECORDINGS_STORAGE_KEY
 } from "./storage-keys";
 import {
+  API_TEMPERATURE,
   DEFAULT_PREFERENCES,
   DEFAULT_MODEL,
   MODEL_OPTIONS,
@@ -723,6 +724,7 @@ export function AppProvider({ children }) {
 
       const payload = {
         model: "gpt-5-mini",
+        temperature: API_TEMPERATURE,
         messages: [
           {
             role: "user",
