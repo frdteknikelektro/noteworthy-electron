@@ -77,7 +77,7 @@
         "dmg",
         "zip"
       ],
-      "icon": "assets/icons/icon.png",
+      "icon": "assets/icons/icon.icns",
       "category": "public.app-category.productivity"
     },
     "win": {
