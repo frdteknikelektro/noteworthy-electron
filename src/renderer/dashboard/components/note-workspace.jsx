@@ -45,14 +45,6 @@ const SOURCE_LABELS = {
   initial: "Initial context"
 };
 
-const SOURCE_BUBBLE_CLASSES = {
-  microphone: "bg-sidebar-accent/10 text-sidebar-accent-foreground",
-  speaker: "bg-secondary/15 text-secondary-foreground",
-  upload: "bg-emerald/10 text-emerald-foreground",
-  manual: "bg-primary/10 text-secondary-foreground",
-  initial: "bg-secondary/10 text-secondary-foreground"
-};
-
 const UNASSIGNED_FOLDER_VALUE = "__unassigned";
 
 function formatTimestamp(value) {
@@ -106,6 +98,7 @@ export function NoteWorkspace() {
   const previousNoteIdRef = useRef(null);
   const transcriptsRef = useRef(null);
   const uploadInputRef = useRef(null);
+  const isEditingRef = useRef(false);
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [isUploadInProgress, setIsUploadInProgress] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -346,11 +339,12 @@ export function NoteWorkspace() {
   );
 
   useLayoutEffect(() => {
-    const transcriptsElement = transcriptsRef.current;
-    if (!transcriptsElement) return;
+    const scrollElement = transcriptsRef.current;
+    if (!scrollElement) return;
+    if (isEditingRef.current) return;
 
-    transcriptsElement.scrollTop = transcriptsElement.scrollHeight;
-  }, [chatMessages.length, isCapturing]);
+    scrollElement.scrollTop = scrollElement.scrollHeight;
+  }, [chatMessages.length, chatMessages, isCapturing, isLiveVisualizerActive]);
 
   useLayoutEffect(() => {
     const titleElement = titleRef.current;
@@ -593,205 +587,216 @@ export function NoteWorkspace() {
 
           <div className="h-px w-full bg-border/70 mt-4" aria-hidden="true" />
 
-          <TabsContent value="transcription" className="flex flex-1 flex-col gap-6 pb-0 mt-0 overflow-hidden">
-            <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-hidden">
-              <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-hidden">
-                <div
-                  ref={transcriptsRef}
-                  className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pt-3 pb-16"
-                >
-                  {showInitialForm && (
-                    <div className="flex flex-col gap-2 text-xs items-end w-full">
-                      <div
-                        className={cn(
-                          "w-full rounded-sm border px-4 py-3 text-sm leading-relaxed text-foreground border-border/40",
-                          SOURCE_BUBBLE_CLASSES.initial
-                        )}
-                      >
-                        <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
-                          <span className="text-xs tracking-wide font-semibold">Initial context</span>
-                        </div>
-                        <div className="mt-3">
-                          <Textarea
-                            placeholder="Type initial context..."
-                            className="w-full border-0 bg-transparent shadow-none px-0 py-0 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-0"
-                            autoComplete="off"
-                            value={initialContextInput}
-                            onChange={handleInitialContextChange}
-                            aria-label="Initial context"
-                            rows={8}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {[
-                    ...chatMessages.map(message => {
+          <TabsContent value="transcription" className="flex flex-1 flex-col gap-4 mt-0 overflow-hidden">
+            <div ref={transcriptsRef} className="flex flex-1 flex-col gap-4 overflow-y-auto py-4 pb-20">
+              {showInitialForm && (
+                <Card>
+                  <CardHeader className="p-3 pb-1">
+                    <CardTitle className="text-sm">Initial Context</CardTitle>
+                    <CardDescription className="text-xs">
+                      Add context before starting your recording
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-2">
+                    <Textarea
+                      placeholder="Type initial context..."
+                      className="min-h-[80px]"
+                      autoComplete="off"
+                      value={initialContextInput}
+                      onChange={handleInitialContextChange}
+                      aria-label="Initial context"
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {chatMessages.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-foreground">Transcript</h4>
+                    <Badge variant="secondary">{chatMessages.length}</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {chatMessages.map(message => {
                       const canEdit = message.hasText && !message.isDraft;
-                      const alignRight = message.isManual || message.isInitial;
+                      const isUserEntry = message.isManual || message.isInitial;
                       return (
                         <div
                           key={message.id}
                           className={cn(
-                            "flex flex-col gap-2 text-xs",
-                            alignRight ? "items-end" : "items-start"
+                            "flex",
+                            isUserEntry ? "justify-end" : "justify-start"
                           )}
                         >
-                          <div
-                            className={cn(
-                              "max-w-[92%] px-3 py-2 text-sm leading-relaxed whitespace-pre-line break-words rounded-sm border border-border/50",
-                              SOURCE_BUBBLE_CLASSES[message.source] || "bg-muted/20 text-foreground",
-                              alignRight && "ml-auto border-border/40"
-                            )}
-                          >
-                            <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
-                              <span className="text-xs tracking-wide font-semibold">{message.sourceLabel}</span>
-                              <span className="text-xs" aria-hidden="true">·</span>
-                              <span className="text-xs">{formatTimestamp(message.timestamp)}</span>
-                            </div>
-                            <div
-                              className={cn(
-                                "mt-1 text-inherit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                                canEdit ? "cursor-text" : "cursor-default"
-                              )}
-                              tabIndex={canEdit ? 0 : undefined}
-                              contentEditable={canEdit}
-                              suppressContentEditableWarning
-                              spellCheck={false}
-                              aria-label={`Transcript entry from ${message.sourceLabel}${message.isManual ? " (manual context)" : ""}`}
-                              onBlur={event => handleTranscriptCommit(message, event)}
-                            >
-                              {message.text}
-                            </div>
-                          </div>
+                          <Card className={cn(
+                            "max-w-[85%]",
+                            isUserEntry && "border-primary/20"
+                          )}>
+                            <CardHeader className="p-3 pb-1">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <CardTitle className="text-xs font-medium">{message.sourceLabel}</CardTitle>
+                                  {message.isDraft && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Live</Badge>
+                                  )}
+                                </div>
+                                <CardDescription className="text-[11px]">{formatTimestamp(message.timestamp)}</CardDescription>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-3 pt-0">
+                              <p
+                                className={cn(
+                                  "text-sm text-muted-foreground whitespace-pre-line",
+                                  canEdit && "cursor-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+                                )}
+                                tabIndex={canEdit ? 0 : undefined}
+                                contentEditable={canEdit}
+                                suppressContentEditableWarning
+                                spellCheck={false}
+                                aria-label={`Transcript entry from ${message.sourceLabel}${message.isManual ? " (manual context)" : ""}`}
+                                onFocus={() => { isEditingRef.current = true; }}
+                                onBlur={event => {
+                                  isEditingRef.current = false;
+                                  handleTranscriptCommit(message, event);
+                                }}
+                              >
+                                {message.text}
+                              </p>
+                            </CardContent>
+                          </Card>
                         </div>
                       );
-                    }),
-                    isCapturing && chatMessages.length > 0 && isLiveVisualizerActive ? (
-                      <div key="manual-context-visualizer" className="flex flex-col gap-2 text-xs items-start">
-                        <div
-                          className={cn(
-                            "max-w-fit w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground",
-                            SOURCE_BUBBLE_CLASSES.manual,
-                            "border-border/40"
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <LiveAudioVisualizer
-                              mediaRecorder={mediaRecorder}
-                              width={130}
-                              height={24}
-                              barWidth={3}
-                              gap={1.5}
-                              backgroundColor="transparent"
-                              barColor={visualizerColors.barColor}
-                              barPlayedColor={visualizerColors.barPlayedColor}
-                            />
-                            <span className="sr-only">Still listening</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null,
-                    isCapturing && chatMessages.length > 0 ? (
-                      <div key="manual-context-form" className="flex flex-col gap-2 text-xs items-end">
-                        <div
-                          className={cn(
-                            "max-w-[60%] w-full rounded-sm border border-border/50 px-4 py-3 text-sm leading-relaxed text-foreground",
-                            SOURCE_BUBBLE_CLASSES.manual,
-                            "ml-auto border-border/40"
-                          )}
-                        >
-                          <form
-                            className="flex items-center gap-2"
-                            onSubmit={event => {
-                              event.preventDefault();
-                              const trimmed = manualInput.trim();
-                              if (trimmed.length === 0) return;
-                              addManualEntry(trimmed);
-                              setManualInput("");
-                            }}
-                          >
-                            <Input
-                              placeholder="Type manual context..."
-                              className="flex-1 border-0 bg-transparent shadow-none px-0 py-0 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-0"
-                              autoComplete="off"
-                              value={manualInput}
-                              onChange={event => setManualInput(event.target.value)}
-                            />
-                            <Button
-                              type="submit"
-                              size="icon"
-                              variant="ghost"
-                              className="rounded-full border border-border/50 bg-muted/70 p-1"
-                              disabled={manualInputLength === 0}
-                            >
-                              <ArrowUp className="h-3 w-3" />
-                              <span className="sr-only">Send manual context</span>
-                            </Button>
-                          </form>
-                        </div>
-                      </div>
-                    ) : null
-                  ]}
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {isCapturing && isLiveVisualizerActive && (
+                <div className="flex justify-start">
+                  <Card className="max-w-[85%]">
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-3">
+                        <LiveAudioVisualizer
+                          mediaRecorder={mediaRecorder}
+                          width={130}
+                          height={24}
+                          barWidth={3}
+                          gap={1.5}
+                          backgroundColor="transparent"
+                          barColor={visualizerColors.barColor}
+                          barPlayedColor={visualizerColors.barPlayedColor}
+                        />
+                        <span className="text-sm text-muted-foreground">Listening...</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {isCapturing && (
+                <div className="flex justify-end">
+                  <Card className="w-full max-w-[92%] border-primary/20">
+                    <CardHeader className="p-3 pb-1">
+                      <CardTitle className="text-xs font-medium">Add Manual Context</CardTitle>
+                      <CardDescription className="text-[11px]">
+                        Type additional notes while recording
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-2">
+                      <form
+                        className="flex items-center gap-2"
+                        onSubmit={event => {
+                          event.preventDefault();
+                          const trimmed = manualInput.trim();
+                          if (trimmed.length === 0) return;
+                          addManualEntry(trimmed);
+                          setManualInput("");
+                        }}
+                      >
+                        <Input
+                          placeholder="Type manual context..."
+                          autoComplete="off"
+                          value={manualInput}
+                          onChange={event => setManualInput(event.target.value)}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="submit"
+                          size="icon"
+                          variant="outline"
+                          disabled={manualInputLength === 0}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                          <span className="sr-only">Send manual context</span>
+                        </Button>
+                      </form>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {chatMessages.length === 0 && !showInitialForm && !isCapturing && (
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground text-center">
+                      Start recording or upload audio to see transcripts here
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-            <div className="flex flex-col gap-3 absolute bottom-4 left-0 right-0">
-              <div className="flex flex-wrap justify-center items-center gap-3">
+
+            <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center gap-2 px-4">
+              <div className="flex items-center justify-center gap-2">
                 <Button
-                  variant={isCapturing ? "destructive" : "secondary"}
+                  variant={isCapturing ? "destructive" : "default"}
                   onClick={handleRecordToggle}
                   aria-label={isCapturing ? "Stop recording session" : "Start recording session"}
-                  className="flex items-center gap-2 px-4 py-2 text-sm"
                 >
                   {isCapturing ? (
-                    <StopCircle className="h-4 w-4 text-destructive-foreground" />
+                    <StopCircle className="h-4 w-4" />
                   ) : (
-                    <CircleDot className="h-4 w-4 text-foreground" />
+                    <CircleDot className="h-4 w-4" />
                   )}
-                  <span>Record Session</span>
+                  <span>{isCapturing ? "Stop" : "Record"}</span>
                 </Button>
 
                 <Button
                   size="icon"
-                  variant="secondary"
+                  variant={micMuted ? "outline" : "secondary"}
                   onClick={toggleMicMute}
                   aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
-                  className={"transition-colors duration-150 text-foreground"}
                 >
                   {micMuted ? (
-                    <MicOff className="h-4 w-4 text-foreground" />
+                    <MicOff className="h-4 w-4" />
                   ) : (
-                    <Mic className="h-4 w-4 text-foreground" />
+                    <Mic className="h-4 w-4" />
                   )}
-                  <span className="sr-only">Microphone {micMuted ? "muted" : "active"}</span>
                 </Button>
 
                 {showUploadButton && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleUploadClick}
-                    disabled={isUploadInProgress}
-                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold"
-                    aria-label="Upload audio file"
-                  >
-                    <Upload className="h-3 w-3" />
-                    <span>{isUploadInProgress ? "Uploading…" : "Upload file"}</span>
-                  </Button>
+                  <>
+                    <Button
+                      variant="secondary"
+                      onClick={handleUploadClick}
+                      disabled={isUploadInProgress}
+                      aria-label="Upload audio file"
+                    >
+                      <Upload className="h-4 w-4" />
+                      <span>{isUploadInProgress ? "Uploading…" : "Upload"}</span>
+                    </Button>
+                    <input
+                      ref={uploadInputRef}
+                      type="file"
+                      accept="audio/*,video/*"
+                      className="hidden"
+                      onChange={handleUploadFileChange}
+                    />
+                  </>
                 )}
               </div>
-              {showUploadButton && (
-                <input
-                  ref={uploadInputRef}
-                  type="file"
-                  accept="audio/*,video/*"
-                  className="hidden"
-                  onChange={handleUploadFileChange}
-                />
-              )}
               {showUploadButton && uploadError && (
-                <p className="text-xs text-destructive text-center">{uploadError}</p>
+                <p className="text-xs text-destructive">{uploadError}</p>
               )}
             </div>
           </TabsContent>
@@ -799,13 +804,13 @@ export function NoteWorkspace() {
           <TabsContent value="summary" className="flex flex-1 flex-col gap-4 mt-0 overflow-hidden">
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto py-4">
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="p-3 pb-1">
                   <CardTitle className="text-sm">Generate Summary</CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs">
                     Create AI-powered summaries from your transcript
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="p-3 pt-2 space-y-2">
                   <textarea
                     value={effectiveSummaryPrompt}
                     onChange={event => setSummaryPrompt(event.target.value)}
@@ -820,8 +825,8 @@ export function NoteWorkspace() {
                     <p className="text-xs text-muted-foreground">{summaryFeedback}</p>
                   )}
                 </CardContent>
-                <CardFooter>
-                  <Button onClick={handleGenerateSummary} disabled={!canGenerateSummary || isGenerating}>
+                <CardFooter className="p-3 pt-0">
+                  <Button size="sm" onClick={handleGenerateSummary} disabled={!canGenerateSummary || isGenerating}>
                     {isGenerating ? "Generating…" : "Generate"}
                   </Button>
                 </CardFooter>
@@ -834,7 +839,7 @@ export function NoteWorkspace() {
                 </div>
                 {storedSummaries.length === 0 ? (
                   <Card>
-                    <CardContent className="py-6">
+                    <CardContent className="p-4">
                       <p className="text-sm text-muted-foreground text-center">
                         Generated summaries will appear here
                       </p>
@@ -843,19 +848,19 @@ export function NoteWorkspace() {
                 ) : (
                   storedSummaries.map((entry, index) => (
                     <Card key={entry.id}>
-                      <CardHeader className="pb-2">
+                      <CardHeader className="p-3 pb-1">
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-sm">{entry.prompt}</CardTitle>
                           <Badge variant="outline" className="text-xs">
                             #{storedSummaries.length - index}
                           </Badge>
                         </div>
-                        <CardDescription>{formatTimestamp(entry.createdAt)}</CardDescription>
+                        <CardDescription className="text-xs">{formatTimestamp(entry.createdAt)}</CardDescription>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-3 pt-2">
                         <p className="text-sm text-muted-foreground whitespace-pre-line">{entry.body}</p>
                       </CardContent>
-                      <CardFooter className="gap-2">
+                      <CardFooter className="p-3 pt-0 gap-2">
                         <Button size="sm" variant="outline" onClick={() => handleCopySummary(entry)}>
                           Copy
                         </Button>
@@ -877,7 +882,7 @@ export function NoteWorkspace() {
               </div>
               {sortedRecordings.length === 0 ? (
                 <Card>
-                  <CardContent className="py-6">
+                  <CardContent className="p-4">
                     <p className="text-sm text-muted-foreground text-center">
                       Record a session to see MP3 exports here
                     </p>
@@ -890,11 +895,11 @@ export function NoteWorkspace() {
                     const audioSrc = buildFileUrl(recording.filePath);
                     return (
                       <Card key={recording.id}>
-                        <CardHeader className="pb-2">
+                        <CardHeader className="p-3 pb-1">
                           <div className="flex items-start justify-between gap-2">
-                            <div className="space-y-1 min-w-0 flex-1">
+                            <div className="space-y-0.5 min-w-0 flex-1">
                               <CardTitle className="text-sm truncate">{recording.title}</CardTitle>
-                              <CardDescription>
+                              <CardDescription className="text-xs">
                                 {formatTimestamp(recording.createdAt)}
                                 {recording.durationMs ? ` · ${formatDuration(recording.durationMs)}` : ""}
                               </CardDescription>
@@ -918,7 +923,7 @@ export function NoteWorkspace() {
                             </div>
                           </div>
                         </CardHeader>
-                        <CardContent className="space-y-3">
+                        <CardContent className="p-3 pt-2 space-y-2">
                           {audioSrc && !recording.fileMissing ? (
                             <audio
                               controls
@@ -937,7 +942,7 @@ export function NoteWorkspace() {
                             <p className="text-xs text-destructive">{recording.error}</p>
                           )}
                         </CardContent>
-                        <CardFooter className="gap-2">
+                        <CardFooter className="p-3 pt-0 gap-2">
                           {audioSrc && !recording.processing && !recording.fileMissing ? (
                             <Button size="sm" variant="outline" asChild>
                               <a href={audioSrc} download={`recording-${recording.id}.mp3`}>
