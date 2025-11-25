@@ -1,31 +1,29 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `main.js` boots the Electron main process, `renderer.js` runs the UI/logic, and `preload.js` exposes any safe helpers to the page.
-- `index.html` is the renderer entry, so keep DOM wiring and styling in the same directory unless a clear separation is needed.
-- Runtime dependencies live under `node_modules/`; do not commit them. Use `.github/` for assets like screenshots so documentation stays consistent with the UI.
-- Persistent data is kept in renderer local storage, so the repo itself stays stateless aside from exports and config.
+- `src/renderer` hosts the App, dashboard, settings modal, workers, and shared styles; keep UI components in `dashboard/components`, helpers in `renderer/lib`, hooks in `src/hooks`, and audio utilities in `src/audio`.
+- `main.js`/`preload.js` drive the Electron main/preload processes. Static assets live under `public` and `assets`, renderer builds go to `dist/`, and packaged installers land in `release/`.
+- `package.json` lists runtime and dev dependencies tied to React/Vite/Electron; keep the config files (`tsconfig.json`, `vite.config.js`, `tailwind.config.js`, `postcss.config.js`) focused on their domains.
 
 ## Build, Test, and Development Commands
-- `npm install` – populates `node_modules/` and keeps `package-lock.json` up to date before you start working.
-- `npm start` – launches the Electron window (`main.js`) after reading `.env` variables like `OPENAI_KEY`. Ensure a valid Realtime API key is in the root `.env` (don’t push it).
-- No additional build steps exist yet; keep changes lightweight and focused on entry points when experimenting locally.
+- `npm run dev` – start the Vite dev server for `src/renderer/index.jsx` and iterate on UI with hot reload.
+- `npm run build:renderer` – output the renderer bundle to `dist/` before packaging or manual QA.
+- `npm run start` – rebuild the renderer and launch Electron (main + preload) for a full desktop preview.
+- `npm run dist[:platform]` – run `electron-builder` after `build:renderer`; use `dist:mac`, `dist:win`, or `dist:linux` for platform-specific installers.
+- Testing is manual: exercise renderer flows via the dev server and native app; document new manual steps so others can repeat them.
 
 ## Coding Style & Naming Conventions
-- JavaScript files use two-space indentation, `const`/`let`, and modern ES modules or CommonJS as needed (see current `main.js`/`renderer.js` for examples).
-- Prefer descriptive camelCase for functions and lowerCamelCase for DOM elements (e.g., `startBtn`, `noteList`). Keep helper classes (like `Session` or `WavRecorder`) capitalized.
-- Keep UI strings and markup near affected modules instead of sprinkling them across unrelated files; follow existing inline template style when updating exports.
+- Follow React + Vite norms: PascalCase for components, camelCase for hooks/utilities, kebab-case for component directories like `dashboard/components` and `workers`.
+- Use two-space indentation in JSX/JS and group imports (external packages before alias imports such as `@/renderer`).
+- Keep Tailwind classes adjacent to the markup they style and avoid unused utilities to limit churn.
+- There is no enforced formatter yet; use `npm run build:renderer` failures and future lint targets as the signal for cleanup.
 
 ## Testing Guidelines
-- No automated tests are configured yet. If you add coverage, pick a framework such as `jest` or `mocha` and register new scripts in `package.json`.
-- Name tests after the module under test (e.g., `session.test.js`) and place them near the code they cover.
-- Document how to run them in this guide once they exist.
+- There is currently no automated suite. Before merging, manually exercise renderer flows via the dev server and native preview (`npm run start`), and document those steps for future contributors.
 
 ## Commit & Pull Request Guidelines
-- Follow Conventional Commit formatting (e.g., `feat(notes): add note color tags`, `fix(io): handle denied permissions`).
-- PR descriptions should summarize the user-visible change, link related issues, and note any manual steps (permissions, backups) required for verification.
-- Attach screenshots or recordings when UI tweaks are involved and mention whether local data (notes, exports) needs resetting before testing.
+- Follow semantic commits (`feat:`, `refactor:`, `fix:` etc.) with a short imperative description and references to issues/PRs when available.
+- PRs need a clear summary, verification steps (commands or manual flows), and any UI screenshots/videos; note the platforms you validated when packaging changes land.
 
 ## Security & Configuration Tips
-- Never commit `.env` or your OpenAI key; add it to `.gitignore` if it isn’t already.
-- When capturing audio, the app requests permission on first run, so mention this to reviewers if your change touches `navigator.mediaDevices`.
+- `.env` is consumed during packaging but never committed—share secrets out of band and keep the repository free of credentials.

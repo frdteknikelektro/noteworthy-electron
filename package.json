@@ -1,5 +1,5 @@
 {
-  "name": "noteworthy-note-taker",
+  "name": "noteworthy-electron",
   "productName": "Noteworthy",
   "description": "Beautiful automatic note taker that captures microphone + system audio and stores local notes.",
   "keywords": [
@@ -10,8 +10,8 @@
     "audio"
   ],
   "main": "./main.js",
-  "version": "1.0.0",
-  "author": "Alec Armbruster <alectrocute@gmail.com>",
+  "version": "0.1.0",
+  "author": "frdteknikelektro@gmail.com",
   "scripts": {
     "dev": "vite",
     "build:renderer": "vite build",
@@ -57,7 +57,7 @@
     "vite": "^5.0.0"
   },
   "build": {
-    "appId": "com.alectrocute.noteworthy",
+    "appId": "com.frdteknikelektro.noteworthy",
     "productName": "Noteworthy",
     "directories": {
       "output": "release"
