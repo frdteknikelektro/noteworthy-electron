@@ -1,0 +1,59 @@
+stages:
+  - build
+
+# Provide a CI-friendly Node environment, mirror gitlab-managed runners, and keep builds quiet.
+variables:
+  NODE_ENV: production
+  NPM_CONFIG_LOGLEVEL: warn
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}-${CI_JOB_NAME}"
+  policy: pull-push
+  paths:
+    - node_modules/
+    - .npm/_cacache
+    - .cache/electron
+    - .cache/electron-builder
+
+default:
+  before_script:
+    # Install dependencies once per job and persist the OpenAI key for electron-builder.
+    - npm ci
+    - node -e "if (!process.env.OPENAI_KEY) throw new Error('OPENAI_KEY must be defined as a CI/CD variable'); const fs=require('fs'); fs.writeFileSync('.env', 'OPENAI_KEY=' + process.env.OPENAI_KEY + '\\n');"
+
+build-linux:
+  stage: build
+  image: electronuserland/builder:20
+  script:
+    - node -e "require('fs').rmSync('release', { recursive: true, force: true });"
+    - npm run dist:linux
+  artifacts:
+    name: "noteworthy-linux-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - release/**
+    expire_in: 1 week
+
+build-windows:
+  stage: build
+  image: electronuserland/builder:wine
+  script:
+    - node -e "require('fs').rmSync('release', { recursive: true, force: true });"
+    - npm run dist:win
+  artifacts:
+    name: "noteworthy-windows-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - release/**
+    expire_in: 1 week
+
+build-macos:
+  stage: build
+  tags:
+    - macos
+  script:
+    - node -e "require('fs').rmSync('release', { recursive: true, force: true });"
+    - npm run dist:mac
+  artifacts:
+    name: "noteworthy-macos-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - release/**
+    expire_in: 1 week

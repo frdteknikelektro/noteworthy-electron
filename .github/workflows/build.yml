@@ -1,0 +1,54 @@
+name: Build release artifacts
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Build ${{ matrix.os }} artifact
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node: ["20.x"]
+        include:
+          - os: ubuntu-latest
+            script: dist:linux
+            artifact-prefix: linux
+          - os: windows-latest
+            script: dist:win
+            artifact-prefix: windows
+          - os: macos-latest
+            script: dist:mac
+            artifact-prefix: macos
+    env:
+      OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+      NODE_ENV: production
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare release directory
+        run: |
+          node -e "require('fs').rmSync('release', { recursive: true, force: true });"
+          node -e "require('fs').writeFileSync('.env', 'OPENAI_KEY=' + process.env.OPENAI_KEY + '\\n');"
+
+      - name: Build platform package
+        run: npm run ${{ matrix.script }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Noteworthy-${{ matrix.artifact-prefix }}-${{ github.run_id }}
+          path: release/**
