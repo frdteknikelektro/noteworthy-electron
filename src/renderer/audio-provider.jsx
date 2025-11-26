@@ -395,8 +395,7 @@ export function AudioProvider({
         type: "near_field"
       },
       input_audio_transcription: {
-        model: transcription.model,
-        temperature: API_TEMPERATURE
+        model: transcription.model
       },
       turn_detection: turnDetection
     };
